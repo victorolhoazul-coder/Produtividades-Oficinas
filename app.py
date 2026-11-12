@@ -481,21 +481,19 @@ else:
         
         df_fact_total = pd.DataFrame()
         
-        if file_fact1_up is not None:
-            try:
-                t1 = pd.read_csv(file_fact1_up, sep=";", encoding="iso-8859-1", skiprows=5)
-                if not t1.empty:
-                    df_fact_total = pd.concat([df_fact_total, t1], ignore_index=True)
-            except Exception as e:
-                st.error(f"Erro ao ler Mapa de Faturação 1: {e}")
-
-        if file_fact2_up is not None:
-            try:
-                t2 = pd.read_csv(file_fact2_up, sep=";", encoding="iso-8859-1", skiprows=5)
-                if not t2.empty:
-                    df_fact_total = pd.concat([df_fact_total, t2], ignore_index=True)
-            except Exception as e:
-                st.error(f"Erro ao ler Mapa de Faturação 2: {e}")
+        # Leitura flexível com skiprows ajustável ou deteção automática
+        for file_f in [file_fact1_up, file_fact2_up]:
+            if file_f is not None:
+                try:
+                    file_f.seek(0)
+                    t_temp = pd.read_csv(file_f, sep=";", encoding="iso-8859-1", skiprows=5)
+                    if len(t_temp.columns) < 3:
+                        file_f.seek(0)
+                        t_temp = pd.read_csv(file_f, sep=",", encoding="iso-8859-1", skiprows=5)
+                    if not t_temp.empty:
+                        df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
+                except Exception as e:
+                    pass
 
         if df_fact_total.empty:
             csv_fact_files = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
@@ -513,22 +511,28 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV de faturação na barra lateral (Admin).")
         else:
+            # Deteção ultra-robusta de colunas de oficina, data e valor
             col_oficina_f = df_fact_total.columns[0]
             
-            col_data_f = next((c for c in df_fact_total.columns if "data" in str(c).lower() or "factura" in str(c).lower()), df_fact_total.columns[min(28, len(df_fact_total.columns)-1)])
-            col_valor_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["liquido", "líquido", "valor", "total", "s/iva"])), df_fact_total.columns[min(24, len(df_fact_total.columns)-1)])
+            col_data_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["data", "factura", "emissão", "dia"])), df_fact_total.columns[min(28, len(df_fact_total.columns)-1)])
+            col_valor_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["liquido", "líquido", "valor", "total", "s/iva", "euros"])), df_fact_total.columns[min(24, len(df_fact_total.columns)-1)])
             
             df_fact_total["Oficina_CSV"] = df_fact_total[col_oficina_f].astype(str).str.strip()
             
-            # Conversão robusta e segura de datas sem erros de tipo
-            df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="mixed", errors="coerce")
+            # Conversão robusta de datas (com dayfirst=True para formato europeu DD-MM-YYYY)
+            df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], dayfirst=True, errors="coerce")
 
-            # Tratamento robusto de valores numéricos
-            if df_fact_total[col_valor_f].dtype == object:
-                df_fact_total["Valor_Num"] = df_fact_total[col_valor_f].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+            # Se ainda houver muitas datas NaT, tenta parse universal misto
+            if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
+                df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="mixed", dayfirst=True, errors="coerce")
+
+            # Tratamento numérico robusto
+            val_series = df_fact_total[col_valor_f]
+            if val_series.dtype == object:
+                df_fact_total["Valor_Num"] = val_series.astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
                 df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total["Valor_Num"], errors="coerce").fillna(0.0)
             else:
-                df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total[col_valor_f], errors="coerce").fillna(0.0)
+                df_fact_total["Valor_Num"] = pd.to_numeric(val_series, errors="coerce").fillna(0.0)
 
             if not df_agrup.empty:
                 col_agrup_oficina = df_agrup.columns[0]
