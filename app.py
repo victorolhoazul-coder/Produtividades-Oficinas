@@ -209,7 +209,7 @@ else:
                 if "FARO" in o.upper(): return o
         if "ÉVORA" in nome_upper or "EVORA" in nome_upper:
             for o in oficinas_oficiais:
-                if "ÉVORA" in o.upper() or "ÉVORA" in o.upper() or "EVORA" in o.upper(): return o
+                if "ÉVORA" in o.upper() or "EVORA" in o.upper(): return o
         if "SETÚBAL" in nome_upper or "SETUBAL" in nome_upper:
             for o in oficinas_oficiais:
                 if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper(): return o
@@ -218,16 +218,13 @@ else:
                 if "SINES" in o.upper(): return o
         return nome_str
 
-    # DETEÇÃO SEGURA DA COLUNA DE OPERÁRIO NO COMPARATIVO DE HORAS
     candidatos_op = ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico", "Mecanico"]
     col_operario_hf = next((c for c in candidatos_op if c in df_hf.columns), None)
     if not col_operario_hf:
-        # Se nenhuma exata corresponder, procura a primeira coluna de texto (object)
         cols_obj = df_hf.select_dtypes(include=['object']).columns
         col_operario_hf = cols_obj[0] if len(cols_obj) > 0 else df_hf.columns[0]
 
     col_fact = next((c for c in ["Tempos facturados", "Tempos facturados ", "Horas facturadas", "Facturado", "Valor"] if c in df_hf.columns), df_hf.select_dtypes(include=['number']).columns[-1])
-    
     col_oficina_hf = next((c for c in ["Oficina", "Escritório", "Escritorio", "Local"] if c in df_hf.columns), None)
     
     df_hf["Operario_clean"] = df_hf[col_operario_hf].astype(str).str.strip().str.upper()
@@ -319,10 +316,22 @@ else:
         df_filtrado_local = df_completo[df_completo["Local"] == sel_local] if sel_local != "Todas" else df_completo
 
         oficinas_unicas = sorted(df_filtrado_local["Oficina"].dropna().astype(str).unique().tolist())
-        oficinas_disponiveis = (["Todas"] + oficinas_unicas) if lenoficinas_unicas > 1 else oficinas_unicas # type: ignore
+        oficinas_disponiveis = (["Todas"] + oficinas_unicas) if len(oficinas_unicas) > 1 else oficinas_unicas
         sel_oficina = st.selectbox("Selecionar Oficina", oficinas_disponiveis if oficinas_disponiveis else ["Sem acesso"])
 
     df_final_filtro = df_filtrado_local[df_filtrado_local["Oficina"] == sel_oficina] if sel_oficina != "Todas" else df_filtrado_local
 
     tot_h_potencial = df_final_filtro["Horas potencial dia"].sum() if "Horas potencial dia" in df_final_filtro.columns else 0.0
-    tot_h_reais = df_final_filtro["Horas reais dia"].sum() if "Horas reais dia" in df_final_filtro.columns else
+    tot_h_reais = df_final_filtro["Horas reais dia"].sum() if "Horas reais dia" in df_final_filtro.columns else 0.0
+    tot_ausencias = df_final_filtro["Ausencias"].sum() if "Ausencias" in df_final_filtro.columns else 0.0
+    tot_h_disp = df_final_filtro["Horas disponiveis"].sum()
+    tot_h_fact = df_final_filtro["Horas facturadas"].sum()
+    tot_prod = (tot_h_fact / tot_h_disp * 100) if tot_h_disp > 0 else 0.0
+
+    linha_total = {
+        "Técnico": "TOTAL",
+        "Local": "-",
+        "Oficina": "-",
+        "Função": "-",
+        "Horas potencial dia": tot_h_potencial,
+        "Horas reais dia": tot_h
