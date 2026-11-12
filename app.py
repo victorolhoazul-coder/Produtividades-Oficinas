@@ -468,7 +468,7 @@ else:
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado]} {ano_corrente}")
         
-        # Orçamento com Fallback Automático para o ficheiro local se o upload estiver vazio
+        # Carregamento de Orçamentos com Fallback Robusto
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
@@ -484,19 +484,21 @@ else:
         
         df_fact_total = pd.DataFrame()
         
-        # Ficheiros CSV de Faturação com Fallback Automático para a pasta local se o upload estiver vazio
+        # Carregamento de Faturação CSV com Fallback Robusto
         csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
         if all(f is None for f in csv_fontes):
             csv_fontes = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
             if not csv_fontes:
                 csv_fontes = glob.glob("*FACTURAÇÃO*.csv")
+            if not csv_fontes:
+                csv_fontes = glob.glob("*.csv")
                 
         for file_f in csv_fontes:
             if file_f is not None:
                 try:
                     if hasattr(file_f, "seek"):
                         file_f.seek(0)
-                    for skip in [5, 4, 3, 2, 6, 0]:
+                    for skip in [5, 4, 3, 2, 6, 0, 1]:
                         if hasattr(file_f, "seek"):
                             file_f.seek(0)
                         try:
@@ -508,7 +510,7 @@ else:
                     if t_temp.empty or len(t_temp.columns) < 3:
                         if hasattr(file_f, "seek"):
                             file_f.seek(0)
-                        t_temp = pd.read_csv(file_f, sep=",", encoding="iso-8859-1", skiprows=5)
+                        t_temp = pd.read_csv(file_f, sep=",", encoding="iso-8859-1", skiprows=0)
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
                 except Exception as e:
@@ -575,23 +577,14 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # ORÇAMENTO MENSAL - Resolução Direta e Garantida
+            # ORÇAMENTO MENSAL - Resolução ultra-robusta por correspondência de oficina
             orcamento_mensal = 0.0
             if not df_orc.empty:
                 col_orc_ofic = df_orc.columns[0]
                 col_orc_val = df_orc.columns[2] if len(df_orc.columns) > 2 else df_orc.columns[1]
-                col_orc_data = df_orc.columns[1] if len(df_orc.columns) > 2 else df_orc.columns[0]
                 
-                df_orc["Data_Parsed"] = pd.to_datetime(df_orc[col_orc_data], format="mixed", errors="coerce")
-                
-                match_orc = df_orc[
-                    (df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()) & 
-                    (df_orc["Data_Parsed"].dt.year == ano_corrente) & 
-                    (df_orc["Data_Parsed"].dt.month == mes_selecionado)
-                ]
-                
-                if match_orc.empty:
-                    match_orc = df_orc[df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()]
+                # Procura direta pela oficina selecionada na folha de orçamento
+                match_orc = df_orc[df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()]
                 
                 if not match_orc.empty:
                     val_raw = match_orc.iloc[0][col_orc_val]
