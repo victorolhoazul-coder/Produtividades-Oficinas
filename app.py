@@ -586,7 +586,7 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL - Leitura robusta e flexível
+            # 4. ORÇAMENTO MENSAL - Leitura 100% Blindada (Texto, Data/Timestamp ou Número)
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
                 col_ofic = df_orc.columns[0]  # Coluna A (Oficina)
@@ -597,22 +597,42 @@ else:
                 
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
-                    mes_row = limpar_str(row[col_mes])
                     
-                    # Compara de forma flexível (contém parte do nome ou igual)
-                    if (sel_clean in ofic_row or ofic_row in sel_clean) and (nome_mes_alvo in mes_row or mes_row in nome_mes_alvo):
-                        val_raw = row[col_val]
-                        try:
-                            if isinstance(val_raw, (int, float)):
-                                v_num = float(val_raw)
+                    # Verifica se a oficina bate certo
+                    if sel_clean in ofic_row or ofic_row in sel_clean:
+                        val_mes_cell = row[col_mes]
+                        mes_encontrado = False
+                        
+                        # Testa se é data/timestamp do pandas
+                        if isinstance(val_mes_cell, (pd.Timestamp, datetime, date)):
+                            if val_mes_cell.month == mes_selecionado:
+                                mes_encontrado = True
+                        else:
+                            # Testa se é texto
+                            mes_row_str = limpar_str(val_mes_cell)
+                            if nome_mes_alvo in mes_row_str or mes_row_str in nome_mes_alvo:
+                                mes_encontrado = True
                             else:
-                                v_str = str(val_raw).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
-                                v_num = float(v_str)
-                            if v_num > 0:
-                                orcamento_mensal = v_num
-                                break
-                        except:
-                            pass
+                                # Tenta detetar por número do mês no texto
+                                try:
+                                    if int(val_mes_cell) == mes_selecionado:
+                                        mes_encontrado = True
+                                except:
+                                    pass
+                        
+                        if mes_encontrado:
+                            val_raw = row[col_val]
+                            try:
+                                if isinstance(val_raw, (int, float)):
+                                    v_num = float(val_raw)
+                                else:
+                                    v_str = str(val_raw).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+                                    v_num = float(v_str)
+                                if v_num > 0:
+                                    orcamento_mensal = v_num
+                                    break
+                            except:
+                                pass
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
