@@ -468,7 +468,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura Direta e Transparente de Faturação CSV
+        # 2. Leitura Robusta com Motor Python e Ignorar Linhas Corrompidas (on_bad_lines='skip')
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
@@ -491,19 +491,14 @@ else:
                         file_bytes = file_f
 
                     t_temp = pd.DataFrame()
-                    for sep_Char in [";", ",", "\t"]:
-                        file_bytes.seek(0)
-                        try:
-                            temp_df = pd.read_csv(file_bytes, sep=sep_Char, encoding="iso-8859-1", low_memory=False, header=0)
-                            if len(temp_df.columns) > 1:
-                                t_temp = temp_df
-                                break
-                        except Exception as ex_read:
-                            st.warning(f"Aviso de leitura com separador '{sep_Char}': {ex_read}")
-                    
-                    if t_temp.empty:
-                        file_bytes.seek(0)
-                        t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", low_memory=False, header=0)
+                    file_bytes.seek(0)
+                    try:
+                        # Usar engine='python' com sep=None e on_bad_lines='skip' resolve erros de tokenização em CSVs complexos
+                        temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", on_bad_lines='skip', header=0)
+                        if len(temp_df.columns) > 1:
+                            t_temp = temp_df
+                    except Exception as ex_read:
+                        st.warning(f"Aviso de leitura CSV: {ex_read}")
                     
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
@@ -513,7 +508,7 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação válidos ou os ficheiros estão vazios.")
         else:
-            # Identificação segura das colunas por índice (Coluna A = 0, Y = 24, AC = 28)
+            # Coluna A = 0 (Oficina), Coluna Y = 24 (Valor), Coluna AC = 28 (Data)
             idx_ofic = 0
             idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
