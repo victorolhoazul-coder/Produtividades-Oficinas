@@ -220,10 +220,12 @@ else:
 
     col_operario_hf = next((c for c in ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico"] if c in df_hf.columns), df_hf.select_dtypes(include=['object']).columns[0])
     col_fact = next((c for c in ["Tempos facturados", "Tempos facturados ", "Horas facturadas", "Facturado", "Valor"] if c in df_hf.columns), df_hf.select_dtypes(include=['number']).columns[-1])
-    col_oficina_hf = next((c for c in ["Oficina", "Escritório", "Escritorio", "Local"] if c in df_hf.columns), "Oficina")
-
-    df_hf["Operario_clean"] = df_hf[col_operario_hf].astype(str).str.strip().str.upper()
-    df_hf["Oficina_Normalizada"] = df_hf[col_oficina_hf].apply(normalizar_oficina)
+    
+    col_oficina_hf = next((c for c in ["Oficina", "Escritório", "Escritorio", "Local"] if c in df_hf.columns), None)
+    if col_oficina_hf:
+        df_hf["Oficina_Normalizada"] = df_hf[col_oficina_hf].apply(normalizar_oficina)
+    else:
+        df_hf["Oficina_Normalizada"] = "Geral"
 
     df_hf_known = df_hf[df_hf["Operario_clean"].notna() & (df_hf["Operario_clean"] != "") & (df_hf["Operario_clean"] != "NAN")]
     df_hf_grouped = df_hf_known.groupby("Operario_clean", as_index=False)[col_fact].sum()
@@ -287,4 +289,28 @@ else:
                     "Produtividade %": 0.0
                 })
 
-    df_sem_
+    df_sem_prod_final = pd.DataFrame(linhas_sem_produtivo)
+    df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True) if not df_sem_prod_final.empty else df_exibicao_tecnicos
+
+    if not st.session_state.acesso_total:
+        def oficina_permitida(oficina):
+            oficina_up = str(oficina).upper()
+            for permitida in st.session_state.oficinas_autorizadas:
+                if permitida in oficina_up or oficina_up in permitida:
+                    return True
+            return False
+        df_completo = df_completo[df_completo["Oficina"].apply(oficina_permitida)]
+
+    with container_filtros:
+        st.header("Filtros")
+        locais_unicos = sorted(df_completo["Local"].dropna().astype(str).unique().tolist())
+        locais_disponiveis = (["Todas"] + locais_unicos) if len(locais_unicos) > 1 else locais_unicos
+        sel_local = st.selectbox("Selecionar Cidade (Local)", locais_disponiveis if locais_disponiveis else ["Sem acesso"])
+
+        df_filtrado_local = df_completo[df_completo["Local"] == sel_local] if sel_local != "Todas" else df_completo
+
+        oficinas_unicas = sorted(df_filtrado_local["Oficina"].dropna().astype(str).unique().tolist())
+        oficinas_disponiveis = (["Todas"] + oficinas_unicas) if len(oficinas_unicas) > 1 else oficinas_unicas
+        sel_oficina = st.selectbox("Selecionar Oficina", oficinas_disponiveis if oficinas_disponiveis else ["Sem acesso"])
+
+    df_final_filtro = df_
