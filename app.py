@@ -60,6 +60,9 @@ if os.path.exists("perfis_utilizadores.xlsx"):
     except Exception as e:
         st.error(f"Erro ao ler perfis_utilizadores.xlsx: {e}")
 
+# ==========================================
+# BARRA LATERAL (SIDEBAR)
+# ==========================================
 container_login = st.sidebar.container()
 
 st.sidebar.markdown("---")
@@ -240,6 +243,9 @@ else:
 nome_arq_aus = f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx"
 path_ausencias = nome_arq_aus if os.path.exists(nome_arq_aus) else None
 
+# ==========================================
+# CORPO PRINCIPAL
+# ==========================================
 if not st.session_state.autenticado:
     st.warning("🔒 Por favor, faça login no topo da barra lateral para aceder aos relatórios.")
 elif not path_mecanicos or not path_hf:
@@ -509,76 +515,4 @@ else:
 
             oficinas_disponiveis_fat = sorted(df_fact_total["Oficina_Agrupada"].unique().tolist())
             if not df_orc.empty:
-                oficinas_orc_unicas = sorted(df_orc["Oficina"].astype(str).str.strip().unique().tolist())
-                oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
-            
-            col_sel_ofic, col_empty = st.columns([2, 2])
-            with col_sel_ofic:
-                oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
-                
-            df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].astype(str).str.upper() == oficina_selecionada_fat.upper()]
-            
-            df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
-            df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
-            df_diario = df_diario.sort_values("Data")
-            
-            inicio_mes = date(ano_corrente, mes_selecionado, 1)
-            if mes_selecionado == 12:
-                fim_mes = date(ano_corrente + 1, 1, 1) - timedelta(days=1)
-            else:
-                fim_mes = date(ano_corrente, mes_selecionado + 1, 1) - timedelta(days=1)
-                
-            range_dias = pd.date_range(start=inicio_mes, end=fim_mes)
-            df_completo_dias = pd.DataFrame({"Data": range_dias.date})
-            df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
-            df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
-            
-            orcamento_mensal = 0.0
-            if not df_orc.empty:
-                df_orc["Data_Parsed"] = pd.to_datetime(df_orc["Data"], errors="coerce")
-                match_orc = df_orc[
-                    (df_orc["Oficina"].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper()) & 
-                    (df_orc["Data_Parsed"].dt.year == ano_corrente) & 
-                    (df_orc["Data_Parsed"].dt.month == mes_selecionado)
-                ]
-                if not match_orc.empty:
-                    orcamento_mensal = float(match_orc.iloc[0]["Valor"])
-                    
-            orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
-            
-            orcamentos_ac = []
-            acum = 0.0
-            for d in df_completo_dias["Data"]:
-                if d.weekday() < 5:
-                    acum += orcamento_diario
-                orcamentos_ac.append(acum)
-            df_completo_dias["Orcamento_Acumulado"] = orcamentos_ac
-            
-            facturacao_a_data = df_completo_dias["Facturacao_Acumulada"].iloc[-1]
-            desvio_orcamento = facturacao_a_data - orcamento_mensal
-            
-            col_graf, col_kpi = st.columns([3, 1])
-            
-            with col_graf:
-                base = alt.Chart(df_completo_dias).encode(
-                    x=alt.X('Data:T', title='Data', axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45))
-                )
-                
-                barras = base.mark_bar(color='#115e59').encode(
-                    y=alt.Y('Facturacao_Acumulada:Q', title='Valor (€)'),
-                    tooltip=['Data', 'Facturacao_Diaria', 'Facturacao_Acumulada']
-                )
-                
-                linha_orc = base.mark_line(color='#f97316', strokeWidth=3).encode(
-                    y='Orcamento_Acumulado:Q',
-                    tooltip=['Data', 'Orcamento_Acumulado']
-                )
-                
-                chart = (barras + linha_orc).properties(height=400).interactive()
-                st.altair_chart(chart, use_container_width=True)
-                
-            with col_kpi:
-                st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.2f} €".replace(",", " ").replace(".", ","), delta=f"{desvio_orcamento:,.2f} €")
+                oficinas
