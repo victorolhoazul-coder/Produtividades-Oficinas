@@ -4,7 +4,30 @@ from datetime import datetime
 import os
 
 st.set_page_config(page_title="Relatório de Produtividade - Oficinas", layout="wide")
-st.title("Relatório de Produtividade de Oficinas")
+
+# CSS personalizado para colorir o botão de atualizar/limpar cache de cinzento
+st.markdown("""
+    <style>
+    div.stButton > button:first-child {
+        background-color: #f0f2f6;
+        color: #31333F;
+        border: 1px solid #dcdcdc;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #e2e4e9;
+        border: 1px solid #c0c0c0;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Cabeçalho com Título e Logotipo no canto superior direito
+col_titulo, col_logo = st.columns([4, 1])
+with col_titulo:
+    st.title("Relatório de Produtividade de Oficinas")
+with col_logo:
+    logo_path = "logo motorpor.jpg" # Certifica-te de que o ficheiro está com este nome exato no repositório
+    if os.path.exists(logo_path):
+        st.image(logo_path, width=160)
 
 meses_pt = {
     1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 
@@ -50,6 +73,10 @@ ano_corrente = 2026
 if st.sidebar.button("Atualizar / Limpar Cache"):
     st.cache_data.clear()
     st.rerun()
+
+# Data e hora da última atualização logo abaixo do botão
+ultima_atualizacao = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+st.sidebar.caption(f"🔄 Última atualização: {ultima_atualizacao}")
 
 dias_uteis_iniciais = 22
 decorridos_iniciais = 22 if (mes_selecionado < mes_atual_num) else min(8, 22)
