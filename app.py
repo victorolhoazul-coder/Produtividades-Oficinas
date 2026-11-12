@@ -483,7 +483,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Carregamento de Faturação CSV
+        # 2. Carregamento Inteligente de Faturação CSV (Adaptável a ficheiros gerados automaticamente)
         df_fact_total = pd.DataFrame()
         csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
         if all(f is None for f in csv_fontes):
@@ -498,19 +498,29 @@ else:
                 try:
                     if hasattr(file_f, "seek"):
                         file_f.seek(0)
-                    for skip in [5, 4, 3, 2, 6, 0, 1]:
+                    t_temp = pd.DataFrame()
+                    for sep_Char in [";", ","]:
                         if hasattr(file_f, "seek"):
                             file_f.seek(0)
-                        try:
-                            t_temp = pd.read_csv(file_f, sep=";", encoding="iso-8859-1", skiprows=skip)
-                        except:
-                            t_temp = pd.read_csv(file_f, sep=",", encoding="iso-8859-1", skiprows=skip)
-                        if len(t_temp.columns) >= 3 and any("data" in str(c).lower() or "factura" in str(c).lower() for c in t_temp.columns):
+                        for skip in range(8):
+                            if hasattr(file_f, "seek"):
+                                file_f.seek(0)
+                            try:
+                                temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", skiprows=skip, low_memory=False)
+                                if len(temp_df.columns) >= 3:
+                                    cols_str = " ".join([str(c).lower() for c in temp_df.columns])
+                                    if any(k in cols_str for k in ["data", "factura", "emissao", "dia", "liquido", "valor", "total"]):
+                                        t_temp = temp_df
+                                        break
+                            except:
+                                pass
+                        if not t_temp.empty:
                             break
-                    if t_temp.empty or len(t_temp.columns) < 3:
+                    if t_temp.empty:
                         if hasattr(file_f, "seek"):
                             file_f.seek(0)
-                        t_temp = pd.read_csv(file_f, sep=",", encoding="iso-8859-1", skiprows=0)
+                        t_temp = pd.read_csv(file_f, sep=None, engine="python", encoding="iso-8859-1", low_memory=False)
+                    
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
                 except Exception as e:
@@ -521,9 +531,10 @@ else:
         else:
             df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
             
+            # Deteção automática inteligente das colunas de Oficina, Data e Valor
             col_oficina_f = df_fact_total.columns[0]
-            col_data_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["data", "factura", "emissão", "dia"])), df_fact_total.columns[min(28, len(df_fact_total.columns)-1)])
-            col_valor_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["liquido", "líquido", "valor", "total", "s/iva", "euros"])), df_fact_total.columns[min(24, len(df_fact_total.columns)-1)])
+            col_data_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["data", "factura", "emissao", "emissão", "dia"])), df_fact_total.columns[min(2, len(df_fact_total.columns)-1)])
+            col_valor_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["liquido", "líquido", "valor", "total", "s/iva", "euros"])), df_fact_total.columns[-1])
             
             df_fact_total["Oficina_CSV"] = df_fact_total[col_oficina_f].astype(str).str.strip()
             df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], dayfirst=True, errors="coerce")
@@ -531,6 +542,7 @@ else:
             if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
                 df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="mixed", dayfirst=True, errors="coerce")
 
+            # Tratamento robusto de valores numéricos independentemente da formatação do sistema gerador
             val_series = df_fact_total[col_valor_f]
             if val_series.dtype == object:
                 s_clean = val_series.astype(str).str.replace("€", "", regex=False).str.strip()
@@ -586,34 +598,30 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL - Leitura 100% Blindada (Texto, Data/Timestamp ou Número)
+            # 4. ORÇAMENTO MENSAL
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
-                col_ofic = df_orc.columns[0]  # Coluna A (Oficina)
-                col_mes = df_orc.columns[3]   # Coluna D (Mês)
-                col_val = df_orc.columns[4]   # Coluna E (Valor)
+                col_ofic = df_orc.columns[0]
+                col_mes = df_orc.columns[3]
+                col_val = df_orc.columns[4]
                 
-                nome_mes_alvo = limpar_str(meses_pt[mes_selecionado]) # ex: "NOVEMBRO"
+                nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
                 
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
                     
-                    # Verifica se a oficina bate certo
                     if sel_clean in ofic_row or ofic_row in sel_clean:
                         val_mes_cell = row[col_mes]
                         mes_encontrado = False
                         
-                        # Testa se é data/timestamp do pandas
                         if isinstance(val_mes_cell, (pd.Timestamp, datetime, date)):
                             if val_mes_cell.month == mes_selecionado:
                                 mes_encontrado = True
                         else:
-                            # Testa se é texto
                             mes_row_str = limpar_str(val_mes_cell)
                             if nome_mes_alvo in mes_row_str or mes_row_str in nome_mes_alvo:
                                 mes_encontrado = True
                             else:
-                                # Tenta detetar por número do mês no texto
                                 try:
                                     if int(val_mes_cell) == mes_selecionado:
                                         mes_encontrado = True
