@@ -4,6 +4,7 @@ from datetime import datetime, date, timedelta
 import os
 import glob
 import altair as alt
+import unicodedata
 
 st.set_page_config(page_title="Relatório de Produtividade e Faturação - Oficinas", layout="wide")
 
@@ -468,7 +469,7 @@ else:
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado]} {ano_corrente}")
         
-        # Carregamento de Orçamentos com Fallback Robusto
+        # 1. Carregamento de Orçamentos com Fallback
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
@@ -482,9 +483,8 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
+        # 2. Carregamento de Faturação CSV com Fallback
         df_fact_total = pd.DataFrame()
-        
-        # Carregamento de Faturação CSV com Fallback Robusto
         csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
         if all(f is None for f in csv_fontes):
             csv_fontes = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
@@ -517,7 +517,7 @@ else:
                     pass
                 
         if df_fact_total.empty:
-            st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV de faturação na barra lateral (Admin) ou coloque-os na pasta do projeto.")
+            st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV na barra lateral (Admin) ou coloque-os na pasta do projeto.")
         else:
             df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
             
@@ -540,6 +540,7 @@ else:
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(val_series, errors="coerce").fillna(0.0)
 
+            # 3. Mapeamento e Agrupamento Flexível
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
@@ -560,7 +561,18 @@ else:
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
                 
-            df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].astype(str).str.upper().str.strip() == oficina_selecionada_fat.upper().strip()]
+            # Filtro Fuzzy/Flexível para a Oficina (ignora maiúsculas, espaços e acentos)
+            def limpar_str(s):
+                if pd.isna(s): return ""
+                s_nfkd = unicodedata.normalize('NFKD', str(s))
+                return "".join([c for c in s_nfkd if not unicodedata.combining(c)]).upper().strip()
+
+            sel_clean = limpar_str(oficina_selecionada_fat)
+            df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean]
+            
+            # Se não encontrar por igualdade exata limpa, tenta correspondência parcial (contains)
+            if df_oficina_fat.empty:
+                df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False)]
             
             df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
             df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
@@ -577,14 +589,17 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # ORÇAMENTO MENSAL - Resolução ultra-robusta por correspondência de oficina
+            # 4. ORÇAMENTO MENSAL - Correspondência Flexível e Robusta
             orcamento_mensal = 0.0
             if not df_orc.empty:
                 col_orc_ofic = df_orc.columns[0]
                 col_orc_val = df_orc.columns[2] if len(df_orc.columns) > 2 else df_orc.columns[1]
                 
-                # Procura direta pela oficina selecionada na folha de orçamento
-                match_orc = df_orc[df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()]
+                # Procura flexível na tabela de orçamento
+                df_orc["Oficina_Clean"] = df_orc[col_orc_ofic].apply(limpar_str)
+                match_orc = df_orc[df_orc["Oficina_Clean"] == sel_clean]
+                if match_orc.empty:
+                    match_orc = df_orc[df_orc["Oficina_Clean"].str.contains(sel_clean, na=False)]
                 
                 if not match_orc.empty:
                     val_raw = match_orc.iloc[0][col_orc_val]
