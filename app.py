@@ -241,6 +241,9 @@ else:
 nome_arq_aus = f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx"
 path_ausencias = nome_arq_aus if os.path.exists(nome_arq_aus) else None
 
+# ==========================================
+# CORPO PRINCIPAL
+# ==========================================
 if not st.session_state.autenticado:
     st.warning("🔒 Por favor, faça login na barra lateral para aceder aos relatórios.")
 elif not path_mecanicos or not path_hf:
@@ -511,12 +514,22 @@ else:
             st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV de faturação na barra lateral (Admin).")
         else:
             col_oficina_f = df_fact_total.columns[0]
-            col_data_f = next((c for c in df_fact_total.columns if "Data" in c and "Factura" in c), df_fact_total.columns[28])
-            col_valor_f = next((c for c in ["Total Liquido S/IVA", "Valor Liquido (M.O.)", "Valor Liquido (Peças)"] if c in df_fact_total.columns), df_fact_total.columns[24])
+            
+            # Detetar automaticamente a coluna de data (procura por "Data" ou "Factura")
+            col_data_f = next((c for c in df_fact_total.columns if "data" in str(c).lower() or "factura" in str(c).lower()), df_fact_total.columns[min(28, len(df_fact_total.columns)-1)])
+            
+            # Detetar automaticamente a coluna de valor líquido/total
+            col_valor_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["liquido", "líquido", "valor", "total", "s/iva"])), df_fact_total.columns[min(24, len(df_fact_total.columns)-1)])
             
             df_fact_total["Oficina_CSV"] = df_fact_total[col_oficina_f].astype(str).str.strip()
-            df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="%d-%m-%Y", errors="coerce")
             
+            # Conversão robusta de datas
+            df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="%d-%m-%Y", errors="coerce")
+            mask_nat = df_fact_total["Data_Parsed"].isna()
+            if mask_nat.any():
+                df_fact_total.loc[mask_nat, "Data_Parsed"] = pd.to_datetime(df_fact_total.loc[mask_nat, col_data_f], errors="coerce")
+
+            # Tratamento robusto de valores numéricos (substituição de pontos/vírgulas)
             if df_fact_total[col_valor_f].dtype == object:
                 df_fact_total["Valor_Num"] = df_fact_total[col_valor_f].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
                 df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total["Valor_Num"], errors="coerce").fillna(0.0)
@@ -545,7 +558,7 @@ else:
             
             df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
             df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
-            df_diario = df_diario.sort_values("Data")
+            df_diario = df_diario.dropna(subset=["Data"]).sort_values("Data")
             
             inicio_mes = date(ano_corrente, mes_selecionado, 1)
             if mes_selecionado == 12:
