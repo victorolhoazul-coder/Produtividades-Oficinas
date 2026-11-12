@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 from datetime import datetime
+import os
 
 st.set_page_config(page_title="Relatório de Produtividade - Oficinas", layout="wide")
 
@@ -18,6 +19,16 @@ if "autenticado" not in st.session_state:
     st.session_state.utilizador = ""
     st.session_state.oficinas_autorizadas = []
     st.session_state.acesso_total = False
+
+# CARREGAR PERFIS AUTOMATICAMENTE DO REPOSITÓRIO (se existir)
+df_perfis = pd.DataFrame()
+if os.path.exists("perfis_utilizadores.xlsx"):
+    try:
+        df_perfis = pd.read_excel("perfis_utilizadores.xlsx")
+        df_perfis["Utilizador_clean"] = df_perfis["Utilizador"].astype(str).str.strip().str.lower()
+        df_perfis["password_clean"] = df_perfis["password"].astype(str).str.strip()
+    except Exception as e:
+        st.error(f"Erro ao ler perfis_utilizadores.xlsx: {e}")
 
 # 0. RESERVAR ESPAÇO PARA O LOGIN / LOGOUT NO TOPO DA BARRA LATERAL
 container_login = st.sidebar.container()
@@ -65,12 +76,11 @@ st.sidebar.progress(
 st.sidebar.markdown("---")
 container_filtros = st.sidebar.container()
 
-# 3. SECÇÃO: CARREGAR FICHEIROS EXCEL (APENas PARA VAZUL E MCHEGADINHO)
+# 3. SECÇÃO: CARREGAR FICHEIROS DE DADOS (APENAS PARA VAZUL E MCHEGADINHO)
 utilizadores_com_permissao_upload = ["vazul", "mchegadinho"]
 utilizador_atual = st.session_state.utilizador.strip().lower()
 tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.lower() for u in utilizadores_com_permissao_upload])
 
-file_perfis = None
 file_mecanicos = None
 file_hf = None
 file_ausencias = None
@@ -78,7 +88,6 @@ file_ausencias = None
 if tem_permissao_upload:
     st.sidebar.markdown("---")
     st.sidebar.header("Carregar Ficheiros Excel")
-    file_perfis = st.sidebar.file_uploader("Carregar 'perfis_utilizadores.xlsx'", type=["xlsx"])
     file_mecanicos = st.sidebar.file_uploader("Carregar 'tabela mecânicos.xlsx'", type=["xlsx"])
     file_hf = st.sidebar.file_uploader("Carregar 'Comparativo de Horas'", type=["xlsx"])
     file_ausencias = st.sidebar.file_uploader("Carregar 'Listagem de Ausencias'", type=["xlsx"])
@@ -86,21 +95,8 @@ if tem_permissao_upload:
 # LÓGICA DE AUTENTICAÇÃO E LOGOUT
 with container_login:
     st.header("Acesso / Login")
-    # Para validar o login, precisamos de ler temporariamente o ficheiro de perfis se o utilizador for admin, 
-    # mas como os admins precisam de carregar os ficheiros, vamos permitir carregar o perfis_utilizadores mesmo antes do login completo, 
-    # ou assumir que o perfis_utilizadores está acessível. Vamos manter o uploader de perfis visível para todos no login se necessário, 
-    # ou restringir os outros. 
-    # Nota: para fazer login, precisamos do df_perfis. Vamos garantir que o uploader de perfis aparece no login:
-    
-if not st.session_state.autenticado:
-    with container_login:
-        file_perfis_temp = st.file_uploader("Carregar 'perfis_utilizadores.xlsx' (Login)", type=["xlsx"], key="login_perfis")
-        if file_perfis_temp:
-            file_perfis = file_perfis_temp
-            df_perfis = pd.read_excel(file_perfis)
-            df_perfis["Utilizador_clean"] = df_perfis["Utilizador"].astype(str).str.strip().str.lower()
-            df_perfis["password_clean"] = df_perfis["password"].astype(str).str.strip()
-
+    if not st.session_state.autenticado:
+        if not df_perfis.empty:
             user_input = st.text_input("Utilizador:").strip().lower()
             pass_input = st.text_input("Password:", type="password").strip()
 
@@ -124,9 +120,8 @@ if not st.session_state.autenticado:
                 else:
                     st.warning("Preencha o utilizador e a password.")
         else:
-            st.caption("Carrege o ficheiro 'perfis_utilizadores.xlsx' para iniciar sessão.")
-else:
-    with container_login:
+            st.error("Ficheiro 'perfis_utilizadores.xlsx' não encontrado no repositório GitHub.")
+    else:
         st.success(f"Sessão iniciada como: **{st.session_state.utilizador}**")
         if st.button("Logout / Mudar Utilizador"):
             st.session_state.autenticado = False
@@ -135,20 +130,19 @@ else:
             st.session_state.acesso_total = False
             st.rerun()
 
-# PROCESSAMENTO DOS DADOS (Se for admin, usa os ficheiros carregados; se for outro utilizador, assume que os ficheiros base estão disponíveis ou tratados)
-# Nota: Para os utilizadores normais gerarem o relatório, eles precisam que os ficheiros de mecânicos, horas e ausências estejam disponíveis. 
-# Se os admins (Vazul / mchegadinho) carregarem os ficheiros, podes guardá-los ou mantê-los na sessão, ou exigir que os admins façam o upload.
-
+# PROCESSAMENTO DOS DADOS
 if not st.session_state.autenticado:
     st.warning("🔒 Por favor, faça login no topo da barra lateral para aceder aos relatórios.")
 elif not tem_permissao_upload and not file_mecanicos:
-    st.info("ℹ️ A aguardar que o administrador carregue os ficheiros de dados da oficina.")
+    # Se já existirem os ficheiros na pasta ou se forem carregados pelo admin, processa. 
+    # Caso contrário, avisa que o admin tem de carregar.
+    st.info("ℹ️ A aguardar que o administrador carregue os ficheiros de dados da oficina na barra lateral.")
 elif file_mecanicos and file_hf:
     xl = pd.ExcelFile(file_mecanicos)
     df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
     df_hf = pd.read_excel(file_hf)
     
-    # PROCESSAMENTO DE AUSÊNCIAS (TUDO O QUE NÃO É "Presença" NA COLUNA B)
+    # PROCESSAMENTO DE AUSÊNCIAS
     df_ausencias = pd.read_excel(file_ausencias) if file_ausencias else pd.DataFrame()
     if not df_ausencias.empty:
         col_desc_aus = df_ausencias.columns[1] if len(df_ausencias.columns) > 1 else None
@@ -344,4 +338,4 @@ elif st.session_state.autenticado and tem_permissao_upload:
     with container_filtros:
         st.header("Filtros")
         st.caption("Carregue os ficheiros em cima para ativar os filtros.")
-    st.info("👈 Por favor, carregue a **tabela de mecânicos** e o **comparativo de horas** na barra lateral para gerar o relatório.")
+    st.info("👈 Por favor, carregue os ficheiros de dados na barra lateral para gerar o relatório.")
