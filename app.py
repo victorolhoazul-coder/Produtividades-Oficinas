@@ -483,7 +483,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Carregamento de Faturação CSV por Posição Fixa (Coluna A=0, Coluna Y=24, Coluna AC=28, pulando o cabeçalho)
+        # 2. Carregamento Flexível de Faturação CSV (Aceita ficheiros carregados ou na pasta, sem restrição de colunas)
         df_fact_total = pd.DataFrame()
         csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
         if all(f is None for f in csv_fontes):
@@ -503,9 +503,8 @@ else:
                         if hasattr(file_f, "seek"):
                             file_f.seek(0)
                         try:
-                            # Lê o CSV ignorando a linha 0 (cabeçalho) para ler diretamente os dados brutos nas posições exatas
                             temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", skiprows=1, low_memory=False, header=None)
-                            if len(temp_df.columns) > 28:
+                            if len(temp_df.columns) > 0:
                                 t_temp = temp_df
                                 break
                         except:
@@ -523,17 +522,21 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV na barra lateral (Admin) ou coloque-os na pasta do projeto.")
         else:
-            # Coluna A (Índice 0) = Oficina, Coluna Y (Índice 24) = Total Líquido, Coluna AC (Índice 28) = Data Fatura
-            df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, 0].astype(str).str.strip()
+            # Oficina = Coluna 0 (A), Valor = Coluna 24 (Y) ou última coluna numérica, Data = Coluna 28 (AC) ou coluna de data
+            idx_ofic = 0
+            idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
+            idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
+
+            df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
             
-            # Conversão robusta da Data (Coluna 28)
-            col_data_raw = df_fact_total.iloc[:, 28]
+            # Conversão robusta da Data
+            col_data_raw = df_fact_total.iloc[:, idx_data]
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
             if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
                 df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, format="mixed", dayfirst=True, errors="coerce")
 
-            # Tratamento robusto dos valores numéricos (Coluna 24)
-            col_valor_raw = df_fact_total.iloc[:, 24]
+            # Tratamento robusto dos valores numéricos
+            col_valor_raw = df_fact_total.iloc[:, idx_val]
             if col_valor_raw.dtype == object:
                 s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
                 s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
