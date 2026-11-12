@@ -5,6 +5,7 @@ import os
 import glob
 import altair as alt
 import unicodedata
+import io
 
 st.set_page_config(page_title="Relatório de Produtividade e Faturação - Oficinas", layout="wide")
 
@@ -257,7 +258,7 @@ elif not path_mecanicos or not path_hf:
     with container_filtros:
         st.header("Filtros")
         st.caption("Aguardando ficheiros de dados.")
-    st.warning(f"⚠️ Não fueron encontrados os ficheiros padrão no repositório para o período de {meses_pt[mes_selecionado].capitalize()} {ano_corrente} ({sigla_mes}). Certifique-se de que os carregou para o GitHub ou use o painel de admin.")
+    st.warning(f"⚠️ Não foram encontrados os ficheiros padrão no repositório para o período de {meses_pt[mes_selecionado].capitalize()} {ano_corrente} ({sigla_mes}). Certifique-se de que os carregou para o GitHub ou use o painel de admin.")
 else:
     if modulo_selecionado == "📊 Produtividade de Oficinas":
         xl = pd.ExcelFile(path_mecanicos)
@@ -483,9 +484,10 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Carregamento Direto e Robusto de Faturação CSV (Lê os ficheiros carregados ou locais sem saltar linhas)
+        # 2. Carregamento Robusto com io.BytesIO para Ficheiros Carregados via Streamlit
         df_fact_total = pd.DataFrame()
         csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
+        
         if all(f is None for f in csv_fontes):
             csv_fontes = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
             if not csv_fontes:
@@ -496,23 +498,28 @@ else:
         for file_f in csv_fontes:
             if file_f is not None:
                 try:
-                    if hasattr(file_f, "seek"):
-                        file_f.seek(0)
+                    # Converte o UploadedFile ou path para bytes / stream seguro
+                    if hasattr(file_f, "getvalue"):
+                        file_bytes = io.BytesIO(file_f.getvalue())
+                    elif isinstance(file_f, str):
+                        with open(file_f, "rb") as f_in:
+                            file_bytes = io.BytesIO(f_in.read())
+                    else:
+                        file_bytes = file_f
+
                     t_temp = pd.DataFrame()
                     for sep_Char in [";", ","]:
-                        if hasattr(file_f, "seek"):
-                            file_f.seek(0)
+                        file_bytes.seek(0)
                         try:
-                            temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", low_memory=False, header=0)
+                            temp_df = pd.read_csv(file_bytes, sep=sep_Char, encoding="iso-8859-1", low_memory=False, header=0)
                             if len(temp_df.columns) > 0:
                                 t_temp = temp_df
                                 break
                         except:
                             pass
                     if t_temp.empty:
-                        if hasattr(file_f, "seek"):
-                            file_f.seek(0)
-                        t_temp = pd.read_csv(file_f, sep=None, engine="python", encoding="iso-8859-1", low_memory=False, header=0)
+                        file_bytes.seek(0)
+                        t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", low_memory=False, header=0)
                     
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
@@ -522,7 +529,7 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV na barra lateral (Admin) ou coloque-os na pasta do projeto.")
         else:
-            # Garante que lê a Coluna A (0), Coluna Y (24) e Coluna AC (28) por índice fixo com segurança
+            # Garante a leitura por posições fixas (Coluna A = 0, Coluna Y = 24, Coluna AC = 28)
             idx_ofic = 0
             idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
