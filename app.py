@@ -515,21 +515,15 @@ else:
         else:
             col_oficina_f = df_fact_total.columns[0]
             
-            # Detetar automaticamente a coluna de data (procura por "Data" ou "Factura")
             col_data_f = next((c for c in df_fact_total.columns if "data" in str(c).lower() or "factura" in str(c).lower()), df_fact_total.columns[min(28, len(df_fact_total.columns)-1)])
-            
-            # Detetar automaticamente a coluna de valor líquido/total
             col_valor_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["liquido", "líquido", "valor", "total", "s/iva"])), df_fact_total.columns[min(24, len(df_fact_total.columns)-1)])
             
             df_fact_total["Oficina_CSV"] = df_fact_total[col_oficina_f].astype(str).str.strip()
             
-            # Conversão robusta de datas
-            df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="%d-%m-%Y", errors="coerce")
-            mask_nat = df_fact_total["Data_Parsed"].isna()
-            if mask_nat.any():
-                df_fact_total.loc[mask_nat, "Data_Parsed"] = pd.to_datetime(df_fact_total.loc[mask_nat, col_data_f], errors="coerce")
+            # Conversão robusta e segura de datas sem erros de tipo
+            df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="mixed", errors="coerce")
 
-            # Tratamento robusto de valores numéricos (substituição de pontos/vírgulas)
+            # Tratamento robusto de valores numéricos
             if df_fact_total[col_valor_f].dtype == object:
                 df_fact_total["Valor_Num"] = df_fact_total[col_valor_f].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
                 df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total["Valor_Num"], errors="coerce").fillna(0.0)
@@ -573,7 +567,7 @@ else:
             
             orcamento_mensal = 0.0
             if not df_orc.empty:
-                df_orc["Data_Parsed"] = pd.to_datetime(df_orc["Data"], errors="coerce")
+                df_orc["Data_Parsed"] = pd.to_datetime(df_orc["Data"], format="mixed", errors="coerce")
                 match_orc = df_orc[
                     (df_orc["Oficina"].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper()) & 
                     (df_orc["Data_Parsed"].dt.year == ano_corrente) & 
