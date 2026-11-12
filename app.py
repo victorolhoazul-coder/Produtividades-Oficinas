@@ -257,7 +257,7 @@ elif not path_mecanicos or not path_hf:
     with container_filtros:
         st.header("Filtros")
         st.caption("Aguardando ficheiros de dados.")
-    st.warning(f"⚠️ Não foram encontrados os ficheiros padrão no repositório para o período de {meses_pt[mes_selecionado].capitalize()} {ano_corrente} ({sigla_mes}). Certifique-se de que os carregou para o GitHub ou use o painel de admin.")
+    st.warning(f"⚠️ Não fueron encontrados os ficheiros padrão no repositório para o período de {meses_pt[mes_selecionado].capitalize()} {ano_corrente} ({sigla_mes}). Certifique-se de que os carregou para o GitHub ou use o painel de admin.")
 else:
     if modulo_selecionado == "📊 Produtividade de Oficinas":
         xl = pd.ExcelFile(path_mecanicos)
@@ -483,7 +483,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Carregamento Flexível de Faturação CSV (Aceita ficheiros carregados ou na pasta, sem restrição de colunas)
+        # 2. Carregamento Direto e Robusto de Faturação CSV (Lê os ficheiros carregados ou locais sem saltar linhas)
         df_fact_total = pd.DataFrame()
         csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
         if all(f is None for f in csv_fontes):
@@ -503,7 +503,7 @@ else:
                         if hasattr(file_f, "seek"):
                             file_f.seek(0)
                         try:
-                            temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", skiprows=1, low_memory=False, header=None)
+                            temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", low_memory=False, header=0)
                             if len(temp_df.columns) > 0:
                                 t_temp = temp_df
                                 break
@@ -512,7 +512,7 @@ else:
                     if t_temp.empty:
                         if hasattr(file_f, "seek"):
                             file_f.seek(0)
-                        t_temp = pd.read_csv(file_f, sep=None, engine="python", encoding="iso-8859-1", low_memory=False, skiprows=1, header=None)
+                        t_temp = pd.read_csv(file_f, sep=None, engine="python", encoding="iso-8859-1", low_memory=False, header=0)
                     
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
@@ -522,7 +522,7 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV na barra lateral (Admin) ou coloque-os na pasta do projeto.")
         else:
-            # Oficina = Coluna 0 (A), Valor = Coluna 24 (Y) ou última coluna numérica, Data = Coluna 28 (AC) ou coluna de data
+            # Garante que lê a Coluna A (0), Coluna Y (24) e Coluna AC (28) por índice fixo com segurança
             idx_ofic = 0
             idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
