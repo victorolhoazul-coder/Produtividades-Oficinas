@@ -222,4 +222,22 @@ with container_login:
             st.session_state.acesso_total = False
             st.rerun()
 
-path_mecanicos = file_mecanicos_up if file_mecanicos_up else ("tabela mecânicos.xlsx" if os.path
+if file_mecanicos_up is not None:
+    path_mecanicos = file_mecanicos_up
+elif os.path.exists("tabela mecânicos.xlsx"):
+    path_mecanicos = "tabela mecânicos.xlsx"
+else:
+    path_mecanicos = None
+
+nome_arq_hf = f"Comparativo de Horas_{sigla_mes}_{ano_corrente}.xlsx"
+if file_hf_up is not None:
+    path_hf = file_hf_up
+elif os.path.exists(nome_arq_hf):
+    path_hf = nome_arq_hf
+else:
+    path_hf = None
+
+nome_arq_aus = f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx"
+path_ausencias = nome_arq_aus if os.path.exists(nome_arq_aus) else None
+
+if not st.session_state
