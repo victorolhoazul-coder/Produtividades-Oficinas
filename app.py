@@ -220,9 +220,15 @@ elif file_mecanicos and file_hf:
     df_sem_prod_final = pd.DataFrame(linhas_sem_produtivo)
     df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True) if not df_sem_prod_final.empty else df_exibicao_tecnicos
 
-    # APLICAR RESTRIÇÃO DE PERFIL
+    # APLICAR RESTRIÇÃO DE PERFIL DE FORMA FLEXÍVEL
     if not st.session_state.acesso_total:
-        df_completo = df_completo[df_completo["Oficina"].str.upper().isin(st.session_state.oficinas_autorizadas)]
+        def oficina_permitida(oficina):
+            oficina_up = str(oficina).upper()
+            for permitida in st.session_state.oficinas_autorizadas:
+                if permitida in oficina_up or oficina_up in permitida:
+                    return True
+            return False
+        df_completo = df_completo[df_completo["Oficina"].apply(oficina_permitida)]
 
     with container_filtros:
         st.header("Filtros")
