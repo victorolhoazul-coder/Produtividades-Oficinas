@@ -50,11 +50,11 @@ st.sidebar.progress(
     text=f"Progresso: {dias_decorridos} de {dias_uteis_padrao_mes} dias ({percentagem_progresso:.1f}%)"
 )
 
-# 2. RESERVAR ESPAÇO PARA OS FILTROS (FICA SEMPRE ACIMA DOS UPLOADS)
+# 2. RESERVAR ESPAÇO PARA OS FILTROS (SEMPRE ACIMA DOS UPLOADS)
 st.sidebar.markdown("---")
 container_filtros = st.sidebar.container()
 
-# 3. SECÇÃO: CARREGAR FICHEIROS EXCEL (SEMPRE NO FUNDO)
+# 3. SECÇÃO: CARREGAR FICHEIROS EXCEL (NO FUNDO)
 st.sidebar.markdown("---")
 st.sidebar.header("Carregar Ficheiros Excel")
 file_mecanicos = st.sidebar.file_uploader("Carregar 'tabela mecânicos.xlsx'", type=["xlsx"])
@@ -83,4 +83,17 @@ if file_mecanicos and file_hf:
         for oficina_oficial in oficinas_oficiais:
             if oficina_oficial.upper() == nome_upper:
                 return oficina_oficial
-        if "RENAULT BEJA" in nome_upper or "PEUGEOT BEJA" in nome_upper or "MECÂNICA BEJA"
+        if "RENAULT BEJA" in nome_upper or "PEUGEOT BEJA" in nome_upper or "MECÂNICA BEJA" in nome_upper:
+            return "MECÂNICA BEJA"
+        if "COLISÃO BEJA" in nome_upper or "COLISAO BEJA" in nome_upper:
+            return "COLISÃO BEJA"
+        return nome_str
+
+    col_operario_hf = next((c for c in ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico"] if c in df_hf.columns), df_hf.select_dtypes(include=['object']).columns[0])
+    col_fact = next((c for c in ["Tempos facturados", "Tempos facturados ", "Horas facturadas", "Facturado", "Valor"] if c in df_hf.columns), df_hf.select_dtypes(include=['number']).columns[-1])
+    col_oficina_hf = next((c for c in ["Oficina", "Escritório", "Escritorio", "Local"] if c in df_hf.columns), "Oficina")
+
+    df_hf["Operario_clean"] = df_hf[col_operario_hf].astype(str).str.strip().str.upper()
+    df_hf["Oficina_Normalizada"] = df_hf[col_oficina_hf].apply(normalizar_oficina)
+
+    df_hf_known = df_hf[df_hf["Operario_clean"].notna() & (df_hf["Operario_clean"]
