@@ -167,7 +167,6 @@ utilizadores_com_permissao_upload = ["vazul", "mchegadinho"]
 utilizador_atual = st.session_state.utilizador.strip().lower() if st.session_state.autenticado else ""
 tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.lower() for u in utilizadores_com_permissao_upload])
 
-# Persistência de ficheiros na sessão para não se perderem ao interagir com a aplicação
 if "file_mecanicos_up" not in st.session_state:
     st.session_state.file_mecanicos_up = None
 if "file_hf_up" not in st.session_state:
@@ -581,7 +580,6 @@ else:
                 
                 df_orc["Data_Parsed"] = pd.to_datetime(df_orc[col_orc_data], format="mixed", errors="coerce")
                 
-                # Procura por oficina e mês/ano correspondente
                 match_orc = df_orc[
                     (df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()) & 
                     (df_orc["Data_Parsed"].dt.year == ano_corrente) & 
@@ -589,7 +587,6 @@ else:
                 ]
                 
                 if match_orc.empty:
-                    # Alternativa flexível por nome da oficina
                     match_orc = df_orc[df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()]
                 
                 if not match_orc.empty:
@@ -639,4 +636,5 @@ else:
             with col_kpi:
                 st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.2f} €".replace(",", " ").replace(".", ","))
                 st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="FATURAÇÃO À DATA", value=
+                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.2f} €".replace(",", " ").replace(".", ","))
+                st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.2f} €".replace(",", " ").replace(".", ","), delta=f"{desvio_orcamento:,.2f} €")
