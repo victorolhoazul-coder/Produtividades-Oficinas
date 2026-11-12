@@ -295,7 +295,7 @@ elif file_mecanicos and file_hf:
     df_exibicao_final = pd.concat([df_final_filtro, pd.DataFrame([linha_total])], ignore_index=True)
 
     def destacar_total(s):
-        is_total = s.index.isin(df_exibicao_final[df_ex_ibicao_final["Técnico"] == "TOTAL"].index) if "Técnico" in df_exibicao_final.columns else []
+        is_total = s.index.isin(df_exibicao_final[df_exibicao_final["Técnico"] == "TOTAL"].index) if "Técnico" in df_exibicao_final.columns else []
         return ['font-weight: bold; background-color: #f0f2f6;' if v else '' for v in is_total]
 
     st.subheader(f"Mapa de Produtividade - {meses_pt[mes_selecionado]} {ano_corrente}")
