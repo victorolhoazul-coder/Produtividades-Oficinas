@@ -483,7 +483,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Carregamento de Faturação CSV
+        # 2. Carregamento de Faturação CSV por Posição Fixa (Coluna 0, Coluna Y=24, Coluna AC=28)
         df_fact_total = pd.DataFrame()
         csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
         if all(f is None for f in csv_fontes):
@@ -506,8 +506,8 @@ else:
                             if hasattr(file_f, "seek"):
                                 file_f.seek(0)
                             try:
-                                temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", skiprows=skip, low_memory=False)
-                                if len(temp_df.columns) >= 25:
+                                temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", skiprows=skip, low_memory=False, header=None)
+                                if len(temp_df.columns) > 28:
                                     t_temp = temp_df
                                     break
                             except:
@@ -517,7 +517,7 @@ else:
                     if t_temp.empty:
                         if hasattr(file_f, "seek"):
                             file_f.seek(0)
-                        t_temp = pd.read_csv(file_f, sep=None, engine="python", encoding="iso-8859-1", low_memory=False)
+                        t_temp = pd.read_csv(file_f, sep=None, engine="python", encoding="iso-8859-1", low_memory=False, header=None)
                     
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
@@ -527,28 +527,24 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV na barra lateral (Admin) ou coloque-os na pasta do projeto.")
         else:
-            df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
+            # Leitura por posições exatas (Sem depender de nomes de cabeçalhos)
+            # Coluna 0 = Oficina, Coluna 24 (Y) = Valor Total Líquido, Coluna 28 (AC) = Data Fatura
+            df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, 0].astype(str).str.strip()
             
-            # Mapeamento robusto com fallback direto para as posições exatas (Col 0 = Oficina, Col 24 / Y = Total Liquido, Col 28 / AC = Data Factu)
-            col_oficina_f = df_fact_total.columns[0]
-            
-            col_data_f = next((c for c in df_fact_total.columns if "data factu" in str(c).lower() or "data" in str(c).lower()), df_fact_total.columns[min(28, len(df_fact_total.columns)-1)])
-            col_valor_f = next((c for c in df_fact_total.columns if "total liqui" in str(c).lower() or "total líquido" in str(c).lower()), df_fact_total.columns[min(24, len(df_fact_total.columns)-1)])
-            
-            df_fact_total["Oficina_CSV"] = df_fact_total[col_oficina_f].astype(str).str.strip()
-            df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], dayfirst=True, errors="coerce")
-
+            # Conversão robusta da Data (Coluna 28)
+            col_data_raw = df_fact_total.iloc[:, 28]
+            df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
             if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
-                df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="mixed", dayfirst=True, errors="coerce")
+                df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, format="mixed", dayfirst=True, errors="coerce")
 
-            # Tratamento robusto dos valores numéricos
-            val_series = df_fact_total[col_valor_f]
-            if val_series.dtype == object:
-                s_clean = val_series.astype(str).str.replace("€", "", regex=False).str.strip()
+            # Tratamento robusto dos valores numéricos (Coluna 24)
+            col_valor_raw = df_fact_total.iloc[:, 24]
+            if col_valor_raw.dtype == object:
+                s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
                 s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
                 df_fact_total["Valor_Num"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
             else:
-                df_fact_total["Valor_Num"] = pd.to_numeric(val_series, errors="coerce").fillna(0.0)
+                df_fact_total["Valor_Num"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
 
             # 3. Mapeamento e Agrupamento
             if not df_agrup.empty:
@@ -586,7 +582,7 @@ else:
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total
             
-            # Filtra estritamente pelo mês selecionado
+            # Filtro estritamente pelo mês e ano selecionados
             df_oficina_fat = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
             
             df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
