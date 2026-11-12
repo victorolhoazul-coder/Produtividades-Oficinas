@@ -7,7 +7,6 @@ import altair as alt
 
 st.set_page_config(page_title="Relatório de Produtividade e Faturação - Oficinas", layout="wide")
 
-# CSS personalizado para escurecer o botão de atualizar/limpar cache
 st.markdown("""
     <style>
     div.stButton > button:first-child {
@@ -24,7 +23,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Cabeçalho com Título e Logotipo no canto superior direito
 col_titulo, col_logo = st.columns([4, 1])
 with col_titulo:
     st.title("Relatório de Oficinas - Grupo Motorpor")
@@ -60,9 +58,6 @@ if os.path.exists("perfis_utilizadores.xlsx"):
     except Exception as e:
         st.error(f"Erro ao ler perfis_utilizadores.xlsx: {e}")
 
-# ==========================================
-# BARRA LATERAL (SIDEBAR)
-# ==========================================
 st.sidebar.header("Navegação e Módulo")
 modulo_selecionado = st.sidebar.radio(
     "Escolha o Módulo:",
@@ -246,9 +241,6 @@ else:
 nome_arq_aus = f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx"
 path_ausencias = nome_arq_aus if os.path.exists(nome_arq_aus) else None
 
-# ==========================================
-# CORPO PRINCIPAL
-# ==========================================
 if not st.session_state.autenticado:
     st.warning("🔒 Por favor, faça login na barra lateral para aceder aos relatórios.")
 elif not path_mecanicos or not path_hf:
@@ -333,4 +325,285 @@ else:
         
         df_hf["Operario_clean"] = df_hf[col_operario_hf].astype(str).str.strip().str.upper()
         if col_oficina_hf:
-            df_hf["Oficina_Normalizada"] = df_hf[col_oficina_hf].apply(normal
+            df_hf["Oficina_Normalizada"] = df_hf[col_oficina_hf].apply(normalizar_oficina)
+        else:
+            df_hf["Oficina_Normalizada"] = "Geral"
+
+        df_hf_known = df_hf[df_hf["Operario_clean"].notna() & (df_hf["Operario_clean"] != "") & (df_hf["Operario_clean"] != "NAN")]
+        df_hf_grouped = df_hf_known.groupby("Operario_clean", as_index=False)[col_fact].sum()
+        df_hf_grouped.rename(columns={col_fact: "Horas facturadas", "Operario_clean": "Técnico_clean"}, inplace=True)
+
+        df_merged = pd.merge(df_mecanicos, df_hf_grouped, on="Técnico_clean", how="left")
+        if not df_ausencias_grouped.empty:
+            df_merged = pd.merge(df_merged, df_ausencias_grouped, on="Técnico_clean", how="left")
+            df_merged["Ausencias"] = df_merged["Ausencias_calc"].fillna(0.0)
+        else:
+            df_merged["Ausencias"] = 0.0
+
+        df_merged["Horas facturadas"] = df_merged["Horas facturadas"].fillna(0.0)
+        df_merged["Horas reais dia"] = df_merged["Horas reais dia"].fillna(7.5)
+        df_merged["Horas disponiveis"] = (dias_decorridos * df_merged["Horas reais dia"]) - df_merged["Ausencias"]
+
+        colunas_finais = [
+            "Técnico", "Local", "Oficina", "Função", 
+            "Horas potencial dia", "Horas reais dia", "Ausencias",
+            "Horas disponiveis", "Horas facturadas", "Produtividade %"
+        ]
+        
+        df_merged["Produtividade %"] = 0.0
+        mask_disp = df_merged["Horas disponiveis"] > 0
+        df_merged.loc[mask_disp, "Produtividade %"] = (
+            df_merged.loc[mask_disp, "Horas facturadas"] / df_merged.loc[mask_disp, "Horas disponiveis"]
+        ) * 100
+
+        df_exibicao_tecnicos = df_merged[[c for c in colunas_finais if c in df_merged.columns]].copy()
+
+        df_hf_sem_op = df_hf[df_hf["Operario_clean"].isna() | (df_hf["Operario_clean"] == "") | (df_hf["Operario_clean"] == "NAN")]
+        
+        linhas_sem_produtivo = []
+        if not df_hf_sem_op.empty:
+            df_sem_op_grouped = df_hf_sem_op.groupby("Oficina_Normalizada", as_index=False)[col_fact].sum()
+            for _, row in df_sem_op_grouped.iterrows():
+                oficina_val = row["Oficina_Normalizada"]
+                horas_fact_val = row[col_fact]
+                
+                if horas_fact_val > 0:
+                    local_val = dict_oficina_local.get(oficina_val.upper(), "Outro")
+                    if local_val == "Outro":
+                        of_upper = oficina_val.upper()
+                        if "BEJA" in of_upper: local_val = "Beja"
+                        elif "PORTIMÃO" in of_upper or "PORTIMAO" in of_upper: local_val = "Portimão"
+                        elif "ÉVORA" in of_upper or "EVORA" in of_upper: local_val = "Évora"
+                        elif "FARO" in of_upper: local_val = "Faro"
+                        elif "SETÚBAL" in of_upper or "SETUBAL" in of_upper: local_val = "Setúbal"
+                        elif "SINES" in of_upper: local_val = "Sines"
+
+                    linhas_sem_produtivo.append({
+                        "Técnico": "Sem produtivo",
+                        "Local": local_val,
+                        "Oficina": oficina_val,
+                        "Função": "Sem Produtivo",
+                        "Horas potencial dia": 0.0,
+                        "Horas reais dia": 0.0,
+                        "Ausencias": 0.0,
+                        "Horas disponiveis": 0.0,
+                        "Horas facturadas": horas_fact_val,
+                        "Produtividade %": 0.0
+                    })
+
+        df_sem_prod_final = pd.DataFrame(linhas_sem_produtivo)
+        df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True) if not df_sem_prod_final.empty else df_exibicao_tecnicos
+
+        if not st.session_state.acesso_total:
+            def oficina_permitida(oficina):
+                oficina_up = str(oficina).upper()
+                for permitida in st.session_state.oficinas_autorizadas:
+                    if permitida in oficina_up or oficina_up in permitida:
+                        return True
+                return False
+            df_completo = df_completo[df_completo["Oficina"].apply(oficina_permitida)]
+
+        with container_filtros:
+            st.header("Filtros")
+            locais_unicos = sorted(df_completo["Local"].dropna().astype(str).unique().tolist())
+            locais_disponiveis = (["Todas"] + locais_unicos) if len(locais_unicos) > 1 else locais_unicos
+            sel_local = st.selectbox("Selecionar Cidade (Local)", locais_disponiveis if locais_disponiveis else ["Sem acesso"])
+
+            df_filtrado_local = df_completo[df_completo["Local"] == sel_local] if sel_local != "Todas" else df_completo
+
+            oficinas_unicas = sorted(df_filtrado_local["Oficina"].dropna().astype(str).unique().tolist())
+            oficinas_disponiveis = (["Todas"] + oficinas_unicas) if len(oficinas_unicas) > 1 else oficinas_unicas
+            sel_oficina = st.selectbox("Selecionar Oficina", oficinas_disponiveis if oficinas_disponiveis else ["Sem acesso"])
+
+        df_final_filtro = df_filtrado_local[df_filtrado_local["Oficina"] == sel_oficina] if sel_oficina != "Todas" else df_filtrado_local
+
+        tot_h_potencial = df_final_filtro["Horas potencial dia"].sum() if "Horas potencial dia" in df_final_filtro.columns else 0.0
+        tot_h_reais = df_final_filtro["Horas reais dia"].sum() if "Horas reais dia" in df_final_filtro.columns else 0.0
+        tot_ausencias = df_final_filtro["Ausencias"].sum() if "Ausencias" in df_final_filtro.columns else 0.0
+        tot_h_disp = df_final_filtro["Horas disponiveis"].sum()
+        tot_h_fact = df_final_filtro["Horas facturadas"].sum()
+        tot_prod = (tot_h_fact / tot_h_disp * 100) if tot_h_disp > 0 else 0.0
+
+        linha_total = {
+            "Técnico": "TOTAL",
+            "Local": "-",
+            "Oficina": "-",
+            "Função": "-",
+            "Horas potencial dia": tot_h_potencial,
+            "Horas reais dia": tot_h_reais,
+            "Ausencias": tot_ausencias,
+            "Horas disponiveis": tot_h_disp,
+            "Horas facturadas": tot_h_fact,
+            "Produtividade %": tot_prod
+        }
+
+        df_exibicao_final = pd.concat([df_final_filtro, pd.DataFrame([linha_total])], ignore_index=True)
+
+        def destacar_total(s):
+            is_total = s.index.isin(df_exibicao_final[df_exibicao_final["Técnico"] == "TOTAL"].index) if "Técnico" in df_exibicao_final.columns else []
+            return ['font-weight: bold; background-color: #f0f2f6;' if v else '' for v in is_total]
+
+        st.subheader(f"Mapa de Produtividade - {meses_pt[mes_selecionado]} {ano_corrente}")
+        st.dataframe(
+            df_exibicao_final.style.apply(destacar_total, axis=1).format({
+                "Horas potencial dia": "{:.1f}",
+                "Horas reais dia": "{:.1f}",
+                "Ausencias": "{:.1f}",
+                "Horas disponiveis": "{:.1f}",
+                "Horas facturadas": "{:.2f}",
+                "Produtividade %": "{:.1f}%"
+            }, na_rep="-"),
+            use_container_width=True
+        )
+
+    elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
+        st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado]} {ano_corrente}")
+        
+        excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
+        df_orc = pd.DataFrame()
+        df_agrup = pd.DataFrame()
+        
+        if file_orc_up is not None:
+            try:
+                df_orc = pd.read_excel(file_orc_up, sheet_name="Oficina_ORÇAMENTO")
+                df_agrup = pd.read_excel(file_orc_up, sheet_name="Agrupamento_oficinas")
+            except Exception as e:
+                st.error(f"Erro ao ler o ficheiro carregado de orçamentos: {e}")
+        elif os.path.exists(excel_orc_path):
+            try:
+                df_orc = pd.read_excel(excel_orc_path, sheet_name="Oficina_ORÇAMENTO")
+                df_agrup = pd.read_excel(excel_orc_path, sheet_name="Agrupamento_oficinas")
+            except Exception as e:
+                st.error(f"Erro ao ler o ficheiro de orçamentos e agrupamentos: {e}")
+        
+        df_fact_total = pd.DataFrame()
+        
+        if file_fact1_up is not None:
+            try:
+                t1 = pd.read_csv(file_fact1_up, sep=";", encoding="iso-8859-1", skiprows=5)
+                if not t1.empty:
+                    df_fact_total = pd.concat([df_fact_total, t1], ignore_index=True)
+            except Exception as e:
+                st.error(f"Erro ao ler Mapa de Faturação 1: {e}")
+
+        if file_fact2_up is not None:
+            try:
+                t2 = pd.read_csv(file_fact2_up, sep=";", encoding="iso-8859-1", skiprows=5)
+                if not t2.empty:
+                    df_fact_total = pd.concat([df_fact_total, t2], ignore_index=True)
+            except Exception as e:
+                st.error(f"Erro ao ler Mapa de Faturação 2: {e}")
+
+        if df_fact_total.empty:
+            csv_fact_files = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
+            if not csv_fact_files:
+                csv_fact_files = glob.glob("*FACTURAÇÃO*.csv")
+                
+            for f in csv_fact_files:
+                try:
+                    temp_df = pd.read_csv(f, sep=";", encoding="iso-8859-1", skiprows=5)
+                    if not temp_df.empty:
+                        df_fact_total = pd.concat([df_fact_total, temp_df], ignore_index=True)
+                except Exception as e:
+                    pass
+                
+        if df_fact_total.empty:
+            st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV de faturação na barra lateral (Admin).")
+        else:
+            col_oficina_f = df_fact_total.columns[0]
+            col_data_f = next((c for c in df_fact_total.columns if "Data" in c and "Factura" in c), df_fact_total.columns[28])
+            col_valor_f = next((c for c in ["Total Liquido S/IVA", "Valor Liquido (M.O.)", "Valor Liquido (Peças)"] if c in df_fact_total.columns), df_fact_total.columns[24])
+            
+            df_fact_total["Oficina_CSV"] = df_fact_total[col_oficina_f].astype(str).str.strip()
+            df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="%d-%m-%Y", errors="coerce")
+            
+            if df_fact_total[col_valor_f].dtype == object:
+                df_fact_total["Valor_Num"] = df_fact_total[col_valor_f].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total["Valor_Num"], errors="coerce").fillna(0.0)
+            else:
+                df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total[col_valor_f], errors="coerce").fillna(0.0)
+
+            if not df_agrup.empty:
+                col_agrup_oficina = df_agrup.columns[0]
+                col_agrup_destino = df_agrup.columns[3] if len(df_agrup.columns) > 3 else df_agrup.columns[1]
+                
+                dict_agrupamento = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip().str.upper(), df_agrup[col_agrup_destino].astype(str).str.strip()))
+                df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"].str.upper().map(dict_agrupamento).fillna(df_fact_total["Oficina_CSV"])
+            else:
+                df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
+
+            oficinas_disponiveis_fat = sorted(df_fact_total["Oficina_Agrupada"].unique().tolist())
+            if not df_orc.empty:
+                oficinas_orc_unicas = sorted(df_orc["Oficina"].astype(str).str.strip().unique().tolist())
+                oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
+            
+            col_sel_ofic, col_empty = st.columns([2, 2])
+            with col_sel_ofic:
+                oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
+                
+            df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].astype(str).str.upper() == oficina_selecionada_fat.upper()]
+            
+            df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
+            df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
+            df_diario = df_diario.sort_values("Data")
+            
+            inicio_mes = date(ano_corrente, mes_selecionado, 1)
+            if mes_selecionado == 12:
+                fim_mes = date(ano_corrente + 1, 1, 1) - timedelta(days=1)
+            else:
+                fim_mes = date(ano_corrente, mes_selecionado + 1, 1) - timedelta(days=1)
+                
+            range_dias = pd.date_range(start=inicio_mes, end=fim_mes)
+            df_completo_dias = pd.DataFrame({"Data": range_dias.date})
+            df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
+            df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
+            
+            orcamento_mensal = 0.0
+            if not df_orc.empty:
+                df_orc["Data_Parsed"] = pd.to_datetime(df_orc["Data"], errors="coerce")
+                match_orc = df_orc[
+                    (df_orc["Oficina"].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper()) & 
+                    (df_orc["Data_Parsed"].dt.year == ano_corrente) & 
+                    (df_orc["Data_Parsed"].dt.month == mes_selecionado)
+                ]
+                if not match_orc.empty:
+                    orcamento_mensal = float(match_orc.iloc[0]["Valor"])
+                    
+            orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
+            
+            orcamentos_ac = []
+            acum = 0.0
+            for d in df_completo_dias["Data"]:
+                if d.weekday() < 5:
+                    acum += orcamento_diario
+                orcamentos_ac.append(acum)
+            df_completo_dias["Orcamento_Acumulado"] = orcamentos_ac
+            
+            facturacao_a_data = df_completo_dias["Facturacao_Acumulada"].iloc[-1]
+            desvio_orcamento = facturacao_a_data - orcamento_mensal
+            
+            col_graf, col_kpi = st.columns([3, 1])
+            
+            with col_graf:
+                base = alt.Chart(df_completo_dias).encode(
+                    x=alt.X('Data:T', title='Data', axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45))
+                )
+                
+                barras = base.mark_bar(color='#115e59').encode(
+                    y=alt.Y('Facturacao_Acumulada:Q', title='Valor (€)'),
+                    tooltip=['Data', 'Facturacao_Diaria', 'Facturacao_Acumulada']
+                )
+                
+                linha_orc = base.mark_line(color='#f97316', strokeWidth=3).encode(
+                    y='Orcamento_Acumulado:Q',
+                    tooltip=['Data', 'Orcamento_Acumulado']
+                )
+                
+                chart = (barras + linha_orc).properties(height=400).interactive()
+                st.altair_chart(chart, use_container_width=True)
+                
+            with col_kpi:
+                st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.2f} €".replace(",", " ").replace(".", ","))
+                st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.2f} €".replace(",", " ").replace(".", ","))
+                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.2f} €".replace(",", " ").replace(".", ","))
+                st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.2f} €".replace(",", " ").replace(".", ","), delta=f"{desvio_orcamento:,.2f} €")
