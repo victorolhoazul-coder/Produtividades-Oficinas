@@ -167,22 +167,29 @@ utilizadores_com_permissao_upload = ["vazul", "mchegadinho"]
 utilizador_atual = st.session_state.utilizador.strip().lower() if st.session_state.autenticado else ""
 tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.lower() for u in utilizadores_com_permissao_upload])
 
-file_mecanicos_up = None
-file_hf_up = None
-file_ausencias_up = None
-file_fact1_up = None
-file_fact2_up = None
-file_orc_up = None
+# Persistência de ficheiros na sessão para não se perderem ao interagir com a aplicação
+if "file_mecanicos_up" not in st.session_state:
+    st.session_state.file_mecanicos_up = None
+if "file_hf_up" not in st.session_state:
+    st.session_state.file_hf_up = None
+if "file_ausencias_up" not in st.session_state:
+    st.session_state.file_ausencias_up = None
+if "file_fact1_up" not in st.session_state:
+    st.session_state.file_fact1_up = None
+if "file_fact2_up" not in st.session_state:
+    st.session_state.file_fact2_up = None
+if "file_orc_up" not in st.session_state:
+    st.session_state.file_orc_up = None
 
 if tem_permissao_upload:
     st.sidebar.markdown("---")
     st.sidebar.header("Atualizar Ficheiros (Admin)")
-    file_mecanicos_up = st.sidebar.file_uploader("Substituir 'tabela mecânicos'", type=["xlsx"])
-    file_hf_up = st.sidebar.file_uploader("Substituir 'Comparativo de Horas'", type=["xlsx"])
-    file_ausencias_up = st.sidebar.file_uploader("Substituir 'Listagem de Ausencias'", type=["xlsx"])
-    file_fact1_up = st.sidebar.file_uploader("Mapa de Faturação 1 (CSV)", type=["csv"])
-    file_fact2_up = st.sidebar.file_uploader("Mapa de Faturação 2 (CSV)", type=["csv"])
-    file_orc_up = st.sidebar.file_uploader("Orçamento e Agrupamentos (XLSX)", type=["xlsx"])
+    st.session_state.file_mecanicos_up = st.sidebar.file_uploader("Substituir 'tabela mecânicos'", type=["xlsx"], key="up_mec")
+    st.session_state.file_hf_up = st.sidebar.file_uploader("Substituir 'Comparativo de Horas'", type=["xlsx"], key="up_hf")
+    st.session_state.file_ausencias_up = st.sidebar.file_uploader("Substituir 'Listagem de Ausencias'", type=["xlsx"], key="up_aus")
+    st.session_state.file_fact1_up = st.sidebar.file_uploader("Mapa de Faturação 1 (CSV)", type=["csv"], key="up_f1")
+    st.session_state.file_fact2_up = st.sidebar.file_uploader("Mapa de Faturação 2 (CSV)", type=["csv"], key="up_f2")
+    st.session_state.file_orc_up = st.sidebar.file_uploader("Orçamento e Agrupamentos (XLSX)", type=["xlsx"], key="up_orc")
 
 st.sidebar.markdown("---")
 container_login = st.sidebar.container()
@@ -223,16 +230,16 @@ with container_login:
             st.session_state.acesso_total = False
             st.rerun()
 
-if file_mecanicos_up is not None:
-    path_mecanicos = file_mecanicos_up
+if st.session_state.file_mecanicos_up is not None:
+    path_mecanicos = st.session_state.file_mecanicos_up
 elif os.path.exists("tabela mecânicos.xlsx"):
     path_mecanicos = "tabela mecânicos.xlsx"
 else:
     path_mecanicos = None
 
 nome_arq_hf = f"Comparativo de Horas_{sigla_mes}_{ano_corrente}.xlsx"
-if file_hf_up is not None:
-    path_hf = file_hf_up
+if st.session_state.file_hf_up is not None:
+    path_hf = st.session_state.file_hf_up
 elif os.path.exists(nome_arq_hf):
     path_hf = nome_arq_hf
 else:
@@ -258,8 +265,8 @@ else:
         df_hf = pd.read_excel(path_hf)
         
         df_ausencias = pd.DataFrame()
-        if file_ausencias_up is not None:
-            df_ausencias = pd.read_excel(file_ausencias_up)
+        if st.session_state.file_ausencias_up is not None:
+            df_ausencias = pd.read_excel(st.session_state.file_ausencias_up)
         elif path_ausencias and isinstance(path_ausencias, str) and os.path.exists(path_ausencias):
             df_ausencias = pd.read_excel(path_ausencias)
 
@@ -466,10 +473,10 @@ else:
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
         
-        if file_orc_up is not None:
+        if st.session_state.file_orc_up is not None:
             try:
-                df_orc = pd.read_excel(file_orc_up, sheet_name="Oficina_ORÇAMENTO")
-                df_agrup = pd.read_excel(file_orc_up, sheet_name="Agrupamento_oficinas")
+                df_orc = pd.read_excel(st.session_state.file_orc_up, sheet_name="Oficina_ORÇAMENTO")
+                df_agrup = pd.read_excel(st.session_state.file_orc_up, sheet_name="Agrupamento_oficinas")
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro carregado de orçamentos: {e}")
         elif os.path.exists(excel_orc_path):
@@ -481,7 +488,7 @@ else:
         
         df_fact_total = pd.DataFrame()
         
-        for file_f in [file_fact1_up, file_fact2_up]:
+        for file_f in [st.session_state.file_fact1_up, st.session_state.file_fact2_up]:
             if file_f is not None:
                 try:
                     file_f.seek(0)
@@ -574,6 +581,7 @@ else:
                 
                 df_orc["Data_Parsed"] = pd.to_datetime(df_orc[col_orc_data], format="mixed", errors="coerce")
                 
+                # Procura por oficina e mês/ano correspondente
                 match_orc = df_orc[
                     (df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()) & 
                     (df_orc["Data_Parsed"].dt.year == ano_corrente) & 
@@ -581,11 +589,11 @@ else:
                 ]
                 
                 if match_orc.empty:
+                    # Alternativa flexível por nome da oficina
                     match_orc = df_orc[df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()]
                 
                 if not match_orc.empty:
                     val_raw = match_orc.iloc[0][col_orc_val]
-                    # Conversão segura de valores monetários com símbolos ou formatação regional
                     if isinstance(val_raw, (int, float)):
                         orcamento_mensal = float(val_raw)
                     else:
@@ -631,5 +639,4 @@ else:
             with col_kpi:
                 st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.2f} €".replace(",", " ").replace(".", ","))
                 st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.2f} €".replace(",", " ").replace(".", ","), delta=f"{desvio_orcamento:,.2f} €")
+                st.metric(label="FATURAÇÃO À DATA", value=
