@@ -169,28 +169,15 @@ utilizadores_com_permissao_upload = ["vazul", "mchegadinho"]
 utilizador_atual = st.session_state.utilizador.strip().lower() if st.session_state.autenticado else ""
 tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.lower() for u in utilizadores_com_permissao_upload])
 
-if "file_mecanicos_up" not in st.session_state:
-    st.session_state.file_mecanicos_up = None
-if "file_hf_up" not in st.session_state:
-    st.session_state.file_hf_up = None
-if "file_ausencias_up" not in st.session_state:
-    st.session_state.file_ausencias_up = None
-if "file_fact1_up" not in st.session_state:
-    st.session_state.file_fact1_up = None
-if "file_fact2_up" not in st.session_state:
-    st.session_state.file_fact2_up = None
-if "file_orc_up" not in st.session_state:
-    st.session_state.file_orc_up = None
-
 if tem_permissao_upload:
     st.sidebar.markdown("---")
     st.sidebar.header("Atualizar Ficheiros (Admin)")
-    st.session_state.file_mecanicos_up = st.sidebar.file_uploader("Substituir 'tabela mecânicos'", type=["xlsx"], key="up_mec")
-    st.session_state.file_hf_up = st.sidebar.file_uploader("Substituir 'Comparativo de Horas'", type=["xlsx"], key="up_hf")
-    st.session_state.file_ausencias_up = st.sidebar.file_uploader("Substituir 'Listagem de Ausencias'", type=["xlsx"], key="up_aus")
-    st.session_state.file_fact1_up = st.sidebar.file_uploader("Mapa de Faturação 1 (CSV)", type=["csv"], key="up_f1")
-    st.session_state.file_fact2_up = st.sidebar.file_uploader("Mapa de Faturação 2 (CSV)", type=["csv"], key="up_f2")
-    st.session_state.file_orc_up = st.sidebar.file_uploader("Orçamento e Agrupamentos (XLSX)", type=["xlsx"], key="up_orc")
+    st.sidebar.file_uploader("Substituir 'tabela mecânicos'", type=["xlsx"], key="up_mec")
+    st.sidebar.file_uploader("Substituir 'Comparativo de Horas'", type=["xlsx"], key="up_hf")
+    st.sidebar.file_uploader("Substituir 'Listagem de Ausencias'", type=["xlsx"], key="up_aus")
+    st.sidebar.file_uploader("Mapa de Faturação 1 (CSV)", type=["csv"], key="up_f1")
+    st.sidebar.file_uploader("Mapa de Faturação 2 (CSV)", type=["csv"], key="up_f2")
+    st.sidebar.file_uploader("Orçamento e Agrupamentos (XLSX)", type=["xlsx"], key="up_orc")
 
 st.sidebar.markdown("---")
 container_login = st.sidebar.container()
@@ -231,20 +218,17 @@ with container_login:
             st.session_state.acesso_total = False
             st.rerun()
 
-if st.session_state.file_mecanicos_up is not None:
-    path_mecanicos = st.session_state.file_mecanicos_up
-elif os.path.exists("tabela mecânicos.xlsx"):
-    path_mecanicos = "tabela mecânicos.xlsx"
-else:
-    path_mecanicos = None
+file_mecanicos_up = st.session_state.get("up_mec")
+file_hf_up = st.session_state.get("up_hf")
+file_ausencias_up = st.session_state.get("up_aus")
+file_fact1_up = st.session_state.get("up_f1")
+file_fact2_up = st.session_state.get("up_f2")
+file_orc_up = st.session_state.get("up_orc")
+
+path_mecanicos = file_mecanicos_up if file_mecanicos_up is not None else ("tabela mecânicos.xlsx" if os.path.exists("tabela mecânicos.xlsx") else None)
 
 nome_arq_hf = f"Comparativo de Horas_{sigla_mes}_{ano_corrente}.xlsx"
-if st.session_state.file_hf_up is not None:
-    path_hf = st.session_state.file_hf_up
-elif os.path.exists(nome_arq_hf):
-    path_hf = nome_arq_hf
-else:
-    path_hf = None
+path_hf = file_hf_up if file_hf_up is not None else (nome_arq_hf if os.path.exists(nome_arq_hf) else None)
 
 nome_arq_aus = f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx"
 path_ausencias = nome_arq_aus if os.path.exists(nome_arq_aus) else None
@@ -266,8 +250,8 @@ else:
         df_hf = pd.read_excel(path_hf)
         
         df_ausencias = pd.DataFrame()
-        if st.session_state.file_ausencias_up is not None:
-            df_ausencias = pd.read_excel(st.session_state.file_ausencias_up)
+        if file_ausencias_up is not None:
+            df_ausencias = pd.read_excel(file_ausencias_up)
         elif path_ausencias and isinstance(path_ausencias, str) and os.path.exists(path_ausencias):
             df_ausencias = pd.read_excel(path_ausencias)
 
@@ -475,7 +459,7 @@ else:
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
         
-        target_orc_file = st.session_state.file_orc_up if st.session_state.file_orc_up is not None else (excel_orc_path if os.path.exists(excel_orc_path) else None)
+        target_orc_file = file_orc_up if file_orc_up is not None else (excel_orc_path if os.path.exists(excel_orc_path) else None)
         
         if target_orc_file is not None:
             try:
@@ -484,9 +468,9 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Carregamento Robusto com io.BytesIO para Ficheiros Carregados via Streamlit
+        # 2. Leitura Direta de Faturação CSV a partir do st.session_state (com BytesIO seguro)
         df_fact_total = pd.DataFrame()
-        csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
+        csv_fontes = [file_fact1_up, file_fact2_up]
         
         if all(f is None for f in csv_fontes):
             csv_fontes = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
@@ -498,7 +482,6 @@ else:
         for file_f in csv_fontes:
             if file_f is not None:
                 try:
-                    # Converte o UploadedFile ou path para bytes / stream seguro
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
                     elif isinstance(file_f, str):
@@ -529,7 +512,7 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV na barra lateral (Admin) ou coloque-os na pasta do projeto.")
         else:
-            # Garante a leitura por posições fixas (Coluna A = 0, Coluna Y = 24, Coluna AC = 28)
+            # Coluna A = 0 (Oficina), Coluna Y = 24 (Valor), Coluna AC = 28 (Data)
             idx_ofic = 0
             idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
