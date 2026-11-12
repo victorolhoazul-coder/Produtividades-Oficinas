@@ -13,19 +13,18 @@ meses_pt = {
     9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
 
-# Inicializar o estado de autenticação e dados na sessão
+meses_sigla = {
+    1: "JAN", 2: "FEV", 3: "MAR", 4: "ABR", 
+    5: "MAI", 6: "JUN", 7: "JUL", 8: "AGO", 
+    9: "SET", 10: "OUT", 11: "NOV", 12: "DEZ"
+}
+
+# Inicializar o estado de autenticação
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
     st.session_state.utilizador = ""
     st.session_state.oficinas_autorizadas = []
     st.session_state.acesso_total = False
-
-if "file_mecanicos_cache" not in st.session_state:
-    st.session_state.file_mecanicos_cache = None
-if "file_hf_cache" not in st.session_state:
-    st.session_state.file_hf_cache = None
-if "file_ausencias_cache" not in st.session_state:
-    st.session_state.file_ausencias_cache = None
 
 # CARREGAR PERFIS AUTOMATICAMENTE DO REPOSITÓRIO
 df_perfis = pd.DataFrame()
@@ -83,26 +82,21 @@ st.sidebar.progress(
 st.sidebar.markdown("---")
 container_filtros = st.sidebar.container()
 
-# 3. SECÇÃO: CARREGAR FICHEIROS DE DADOS (APENAS PARA VAZUL E MCHEGADINHO)
+# 3. SECÇÃO: CARREGAR FICHEIROS (APENAS PARA ADMINS ATUALIZAREM SE QUISEREM)
 utilizadores_com_permissao_upload = ["vazul", "mchegadinho"]
 utilizador_atual = st.session_state.utilizador.strip().lower()
 tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.lower() for u in utilizadores_com_permissao_upload])
 
+file_mecanicos_up = None
+file_hf_up = None
+file_ausencias_up = None
+
 if tem_permissao_upload:
     st.sidebar.markdown("---")
-    st.sidebar.header("Carregar Ficheiros Excel (Admin)")
-    
-    f_mec = st.sidebar.file_uploader("Carregar 'tabela mecânicos.xlsx'", type=["xlsx"], key="up_mec")
-    if f_mec:
-        st.session_state.file_mecanicos_cache = f_mec
-        
-    f_hf = st.sidebar.file_uploader("Carregar 'Comparativo de Horas'", type=["xlsx"], key="up_hf")
-    if f_hf:
-        st.session_state.file_hf_cache = f_hf
-        
-    f_aus = st.sidebar.file_uploader("Carregar 'Listagem de Ausencias'", type=["xlsx"], key="up_aus")
-    if f_aus:
-        st.session_state.file_ausencias_cache = f_aus
+    st.sidebar.header("Atualizar Ficheiros (Admin)")
+    file_mecanicos_up = st.sidebar.file_uploader("Substituir 'tabela mecânicos'", type=["xlsx"])
+    file_hf_up = st.sidebar.file_uploader("Substituir 'Comparativo de Horas'", type=["xlsx"])
+    file_ausencias_up = st.sidebar.file_uploader("Substituir 'Listagem de Ausencias'", type=["xlsx"])
 
 # LÓGICA DE AUTENTICAÇÃO E LOGOUT
 with container_login:
@@ -142,25 +136,26 @@ with container_login:
             st.session_state.acesso_total = False
             st.rerun()
 
-# PROCESSAMENTO DOS DADOS USANDO O CACHE GLOBAL DA SESSÃO
-file_mecanicos = st.session_state.file_mecanicos_cache
-file_hf = st.session_state.file_hf_cache
-file_ausencias = st.session_state.file_ausencias_cache
+# PROCESSAMENTO DOS DADOS (Automático do repositório ou via upload admin)
+sigla_mes = meses_sigla.get(mes_selecionado, "NOV")
+path_mecanicos = file_mecanicos_up if file_mecanicos_up else ("tabela mecânicos.xlsx" if os.path.exists("tabela mecânicos.xlsx") else None)
+path_hf = file_hf_up if file_hf_up else (f"Comparativo de Horas_{sigla_mes}_{ano_corrente}.xlsx" if os.path.exists(f"Comparativo de Horas_{sigla_mes}_{ano_corrente}.xlsx") else None)
+path_ausencias = file_ausencias_up if file_ausencias_up else (f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx" if os.path.exists(f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx") else None)
 
 if not st.session_state.autenticado:
     st.warning("🔒 Por favor, faça login no topo da barra lateral para aceder aos relatórios.")
-elif not file_mecanicos or not file_hf:
+elif not path_mecanicos or not path_hf:
     with container_filtros:
         st.header("Filtros")
-        st.caption("Aguardando carregamento de ficheiros.")
-    st.info("ℹ️ Os ficheiros de dados ainda não foram carregados pelo administrador (Vazul ou mchegadinho).")
+        st.caption("Aguardando ficheiros de dados.")
+    st.warning(f"⚠️ Não foram encontrados os ficheiros padrão no repositório para o mês de {meses_pt[mes_selecionado]} ({sigla_mes}). Certifique-se de que os carregou para o GitHub ou use o painel de admin.")
 else:
-    xl = pd.ExcelFile(file_mecanicos)
+    xl = pd.ExcelFile(path_mecanicos)
     df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
-    df_hf = pd.read_excel(file_hf)
+    df_hf = pd.read_excel(path_hf)
     
-    # PROCESSAMENTO DE AUSÊNCIAS (TUDO O QUE NÃO É "Presença" NA COLUNA B)
-    df_ausencias = pd.read_excel(file_ausencias) if file_ausencias else pd.DataFrame()
+    # PROCESSAMENTO DE AUSÊNCIAS
+    df_ausencias = pd.read_excel(path_ausencias) if path_ausencias and os.path.exists(path_ausencias) or file_ausencias_up else pd.DataFrame()
     if not df_ausencias.empty:
         col_desc_aus = df_ausencias.columns[1] if len(df_ausencias.columns) > 1 else None
         col_op_aus = next((c for c in ["Mecânico (Nome)", "Nome", "Técnico", "Tecnico", "Operário", "Operario"] if c in df_ausencias.columns), df_ausencias.columns[3] if len(df_ausencias.columns) > 3 else df_ausencias.select_dtypes(include=['object']).columns[0])
