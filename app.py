@@ -483,7 +483,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Carregamento Inteligente de Faturação CSV (Adaptável a ficheiros gerados automaticamente)
+        # 2. Carregamento de Faturação CSV
         df_fact_total = pd.DataFrame()
         csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
         if all(f is None for f in csv_fontes):
@@ -507,11 +507,9 @@ else:
                                 file_f.seek(0)
                             try:
                                 temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", skiprows=skip, low_memory=False)
-                                if len(temp_df.columns) >= 3:
-                                    cols_str = " ".join([str(c).lower() for c in temp_df.columns])
-                                    if any(k in cols_str for k in ["data", "factura", "emissao", "dia", "liquido", "valor", "total"]):
-                                        t_temp = temp_df
-                                        break
+                                if len(temp_df.columns) >= 28: # Garante que tem colunas suficientes até à Coluna Y/AC
+                                    t_temp = temp_df
+                                    break
                             except:
                                 pass
                         if not t_temp.empty:
@@ -531,10 +529,11 @@ else:
         else:
             df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
             
-            # Deteção automática inteligente das colunas de Oficina, Data e Valor
+            # Mapeamento exato baseado na imagem (Coluna 0 = Oficina, Coluna AC = Data Factu, Coluna Y = Total Liqui)
             col_oficina_f = df_fact_total.columns[0]
-            col_data_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["data", "factura", "emissao", "emissão", "dia"])), df_fact_total.columns[min(2, len(df_fact_total.columns)-1)])
-            col_valor_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["liquido", "líquido", "valor", "total", "s/iva", "euros"])), df_fact_total.columns[-1])
+            
+            col_data_f = next((c for c in df_fact_total.columns if "data factu" in str(c).lower() or "data" in str(c).lower()), df_fact_total.columns[min(28, len(df_fact_total.columns)-1)])
+            col_valor_f = next((c for c in df_fact_total.columns if "total liqui" in str(c).lower() or "total líquido" in str(c).lower()), df_fact_total.columns[min(24, len(df_fact_total.columns)-1)])
             
             df_fact_total["Oficina_CSV"] = df_fact_total[col_oficina_f].astype(str).str.strip()
             df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], dayfirst=True, errors="coerce")
@@ -542,7 +541,7 @@ else:
             if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
                 df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="mixed", dayfirst=True, errors="coerce")
 
-            # Tratamento robusto de valores numéricos independentemente da formatação do sistema gerador
+            # Tratamento robusto dos valores da Coluna Y ("Total Liqui")
             val_series = df_fact_total[col_valor_f]
             if val_series.dtype == object:
                 s_clean = val_series.astype(str).str.replace("€", "", regex=False).str.strip()
@@ -653,7 +652,7 @@ else:
             df_completo_dias["Orcamento_Acumulado"] = orcamentos_ac
             
             facturacao_a_data = df_completo_dias["Facturacao_Acumulada"].iloc[-1]
-            desvio_orcamento = facturacao_a_data - orcamento_mensal
+            desvio_orcamento = facturacao_a_data - orçamento_mensal if 'orçamento_mensal' in locals() else facturacao_a_data - orcamento_mensal
             
             col_graf, col_kpi = st.columns([3, 1])
             
