@@ -124,7 +124,18 @@ elif file_mecanicos and file_hf:
     xl = pd.ExcelFile(file_mecanicos)
     df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
     df_hf = pd.read_excel(file_hf)
+    
+    # PROCESSAMENTO DO FICHEIRO DE AUSÊNCIAS
     df_ausencias = pd.read_excel(file_ausencias) if file_ausencias else pd.DataFrame()
+    if not df_ausencias.empty:
+        col_op_aus = next((c for c in ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico"] if c in df_ausencias.columns), df_ausencias.select_dtypes(include=['object']).columns[0])
+        col_val_aus = next((c for c in ["Ausências", "Ausencias", "Horas", "Total", "Dias"] if c in df_ausencias.columns), df_ausencias.select_dtypes(include=['number']).columns[-1])
+        
+        df_ausencias["Técnico_clean"] = df_ausencias[col_op_aus].astype(str).str.strip().str.upper()
+        df_ausencias_grouped = df_ausencias.groupby("Técnico_clean", as_index=False)[col_val_aus].sum()
+        df_ausencias_grouped.rename(columns={col_val_aus: "Ausencias_calc", "Técnico_clean": "Técnico_clean"}, inplace=True)
+    else:
+        df_ausencias_grouped = pd.DataFrame(columns=["Técnico_clean", "Ausencias_calc"])
 
     df_mecanicos.rename(columns={"Técnicos": "Técnico", "Nome": "Técnico"}, inplace=True)
     df_mecanicos["Técnico_clean"] = df_mecanicos["Técnico"].astype(str).str.strip().str.upper()
@@ -185,9 +196,15 @@ elif file_mecanicos and file_hf:
     df_hf_grouped = df_hf_known.groupby("Operario_clean", as_index=False)[col_fact].sum()
     df_hf_grouped.rename(columns={col_fact: "Horas facturadas", "Operario_clean": "Técnico_clean"}, inplace=True)
 
+    # UNIR MECÂNICOS COM HORAS FACTURADAS E AUSÊNCIAS
     df_merged = pd.merge(df_mecanicos, df_hf_grouped, on="Técnico_clean", how="left")
+    if not df_ausencias_grouped.empty:
+        df_merged = pd.merge(df_merged, df_ausencias_grouped, on="Técnico_clean", how="left")
+        df_merged["Ausencias"] = df_merged["Ausencias_calc"].fillna(0.0)
+    else:
+        df_merged["Ausencias"] = 0.0
+
     df_merged["Horas facturadas"] = df_merged["Horas facturadas"].fillna(0.0)
-    df_merged["Ausencias"] = df_merged["Ausencias"].fillna(0.0) if "Ausencias" in df_merged.columns else 0.0
     df_merged["Horas reais dia"] = df_merged["Horas reais dia"].fillna(7.5)
     df_merged["Horas disponiveis"] = (dias_decorridos * df_merged["Horas reais dia"]) - df_merged["Ausencias"]
 
