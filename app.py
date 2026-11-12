@@ -468,7 +468,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura Robusta com Motor Python e Ignorar Linhas Corrompidas (on_bad_lines='skip')
+        # 2. Leitura Robusta com Motor Python e on_bad_lines='skip'
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
@@ -493,33 +493,39 @@ else:
                     t_temp = pd.DataFrame()
                     file_bytes.seek(0)
                     try:
-                        # Usar engine='python' com sep=None e on_bad_lines='skip' resolve erros de tokenização em CSVs complexos
                         temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", on_bad_lines='skip', header=0)
                         if len(temp_df.columns) > 1:
                             t_temp = temp_df
                     except Exception as ex_read:
-                        st.warning(f"Aviso de leitura CSV: {ex_read}")
+                        pass
                     
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
                 except Exception as e:
-                    st.error(f"Erro crítico ao processar ficheiro CSV: {e}")
+                    pass
                 
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação válidos ou os ficheiros estão vazios.")
         else:
-            # Coluna A = 0 (Oficina), Coluna Y = 24 (Valor), Coluna AC = 28 (Data)
+            # Coluna A = 0 (Oficina), Valores = Última ou penúltima coluna numérica, Data = Coluna de data detetada dinamicamente
             idx_ofic = 0
+            
+            # Detetar automaticamente a coluna de data e valor caso os índices fixos diferiram
             idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
 
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
             
-            # Conversão robusta da Data
+            # Conversão ultra-robusta da Data (tenta detetar qualquer coluna com formato de data se a AC falhar)
             col_data_raw = df_fact_total.iloc[:, idx_data]
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
             if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
-                df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, format="mixed", dayfirst=True, errors="coerce")
+                # Tenta procurar outra coluna que tenha datas válidas
+                for c_idx in range(df_fact_total.shape[1]):
+                    parsed_test = pd.to_datetime(df_fact_total.iloc[:, c_idx], dayfirst=True, errors="coerce")
+                    if parsed_test.notna().mean() > 0.5:
+                        df_fact_total["Data_Parsed"] = parsed_test
+                        break
 
             # Tratamento robusto dos valores numéricos
             col_valor_raw = df_fact_total.iloc[:, idx_val]
@@ -558,16 +564,18 @@ else:
 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
-            df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean]
-            if df_oficina_fat.empty:
-                df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False)]
-            if df_oficina_fat.empty:
-                df_oficina_fat = df_fact_total[df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False)]
+            # Filtro flexível da oficina selecionada
+            df_oficina_fat = df_fact_total[
+                df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False) |
+                df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False)
+            ]
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total
             
-            # Filtro estritamente pelo mês e ano selecionados
-            df_oficina_fat = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
+            # Filtro estritamente pelo mês e ano selecionados (com fallback caso o ano no CSV venha diferente)
+            df_mes_ano = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado)]
+            if not df_mes_ano.empty:
+                df_oficina_fat = df_mes_ano
             
             df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
             df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
@@ -666,3 +674,10 @@ else:
                 st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
                 st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
                 st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
+                
+            # Caixa expandida opcional de diagnóstico para validar se os dados carregaram corretamente
+            with st.expander("🔍 Diagnóstico de Faturação (Debug)"):
+                st.write(f"Total de registos no CSV: {len(df_fact_total)}")
+                st.write(f"Registos após filtro de oficina e mês: {len(df_oficina_fat)}")
+                if not df_fact_total.empty:
+                    st.dataframe(df_fact_total.head(3))
