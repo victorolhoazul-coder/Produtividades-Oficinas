@@ -586,7 +586,7 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL - Extração Precisa da Columna do Mês Selecionado
+            # 4. ORÇAMENTO MENSAL - Leitura Híbrida (Linhas ou Colunas)
             orcamento_mensal = 0.0
             if not df_orc.empty:
                 col_orc_ofic = df_orc.columns[0]
@@ -596,33 +596,58 @@ else:
                     match_orc = df_orc[df_orc["Oficina_Clean"].str.contains(sel_clean, na=False)]
                 
                 if not match_orc.empty:
-                    row_orc = match_orc.iloc[0]
                     nome_mes_pt = meses_pt[mes_selecionado].upper()
                     sigla_m = meses_sigla[mes_selecionado].upper()
                     
                     val_encontrado = None
-                    # Procura estricta pela coluna que corresponde exatamente ao mês selecionado
-                    for col in df_orc.columns:
-                        col_str = str(col).upper()
-                        if nome_mes_pt in col_str or sigla_m in col_str:
-                            val_c = row_orc[col]
+                    
+                    # Tenta primeiro ver se existe uma coluna com o nome do mês
+                    for row_idx, row_orc in match_orc.iterrows():
+                        for col in df_orc.columns:
+                            col_str = str(col).upper()
+                            if nome_mes_pt in col_str or sigla_m in col_str:
+                                val_c = row_orc[col]
+                                try:
+                                    v_num = float(str(val_c).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
+                                    if v_num > 0:
+                                        val_encontrado = v_num
+                                        break
+                                except:
+                                    pass
+                        if val_encontrado is not None:
+                            break
+                            
+                    # Se não encontrou por coluna, verifica se a própria tabela tem linhas por mês e colunas de valor
+                    if val_encontrado is None:
+                        for row_idx, row_orc in match_orc.iterrows():
+                            for col in df_orc.columns:
+                                val_c = row_orc[col]
+                                val_str_up = str(val_c).upper()
+                                if nome_mes_pt in val_str_up or sigla_m in val_str_up:
+                                    # Procura um valor numérico nas colunas vizinhas da mesma linha
+                                    for col_sub in df_orc.columns:
+                                        if col_sub != col:
+                                            try:
+                                                v_num = float(str(row_orc[col_sub]).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
+                                                if v_num > 50:
+                                                    val_encontrado = v_num
+                                                    break
+                                            except:
+                                                pass
+                            if val_encontrado is not None:
+                                break
+
+                    # Fallback padrão: se tiver coluna índice correspondente ao mês
+                    if val_encontrado is None and len(match_orc) > 0:
+                        row_orc = match_orc.iloc[0]
+                        for col in df_orc.columns[1:]:
                             try:
-                                v_num = float(str(val_c).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
-                                if v_num > 0:
+                                v_num = float(str(row_orc[col]).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
+                                if v_num > 500:
                                     val_encontrado = v_num
                                     break
                             except:
                                 pass
-                    
-                    # Se não encontrar pelo nome do mês na coluna, procura por uma coluna com índice específico ou valor unitário provável
-                    if val_encontrado is None and len(df_orc.columns) > mes_selecionado:
-                        try:
-                            val_c = row_orc[df_orc.columns[mes_selecionado]]
-                            v_num = float(str(val_c).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
-                            if v_num > 0:
-                                val_encontrado = v_num
-                        except:
-                            pass
 
                     orcamento_mensal = val_encontrado if val_encontrado is not None else 0.0
                     
