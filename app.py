@@ -33,9 +33,9 @@ with col_logo:
         st.image(logo_path, width=150)
 
 meses_pt = {
-    1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 
-    5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto", 
-    9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+    1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril", 
+    5: "maio", 6: "junho", 7: "julho", 8: "agosto", 
+    9: "setembro", 10: "outubro", 11: "novembro", 12: "dezembro"
 }
 
 meses_sigla = {
@@ -73,8 +73,8 @@ mes_atual_num = datetime.now().month
 mes_selecionado = st.sidebar.selectbox(
     "Mês:", 
     options=list(meses_pt.keys()), 
-    format_func=lambda x: meses_pt[x], 
-    index=list(meses_pt.keys()).index(mes_atual_num) if (mes_atual_num in meses_pt and ano_corrente == 2026) else 10
+    format_func=lambda x: meses_pt[x].capitalize(), 
+    index=list(meses_pt.keys()).index(mes_atual_num) if (mes_atual_num in mes_pt and ano_corrente == 2026) else 10
 )
 
 sigla_mes = meses_sigla.get(mes_selecionado, "NOV")
@@ -143,7 +143,7 @@ dias_uteis_calculados = calcular_dias_uteis_mes(ano_corrente, mes_selecionado, c
 decorridos_iniciais = dias_uteis_calculados if (mes_selecionado < mes_atual_num or ano_corrente < 2026) else min(8, dias_uteis_calculados)
 
 dias_uteis_padrao_mes = st.sidebar.slider(
-    f"Total de Dias Úteis ({meses_pt[mes_selecionado]}):", 
+    f"Total de Dias Úteis ({meses_pt[mes_selecionado].capitalize()}):", 
     min_value=15, max_value=25, value=dias_uteis_calculados
 )
 
@@ -257,7 +257,7 @@ elif not path_mecanicos or not path_hf:
     with container_filtros:
         st.header("Filtros")
         st.caption("Aguardando ficheiros de dados.")
-    st.warning(f"⚠️ Não foram encontrados os ficheiros padrão no repositório para o período de {meses_pt[mes_selecionado]} {ano_corrente} ({sigla_mes}). Certifique-se de que os carregou para o GitHub ou use o painel de admin.")
+    st.warning(f"⚠️ Não foram encontrados os ficheiros padrão no repositório para o período de {meses_pt[mes_selecionado].capitalize()} {ano_corrente} ({sigla_mes}). Certifique-se de que os carregou para o GitHub ou use o painel de admin.")
 else:
     if modulo_selecionado == "📊 Produtividade de Oficinas":
         xl = pd.ExcelFile(path_mecanicos)
@@ -453,7 +453,7 @@ else:
             is_total = s.index.isin(df_exibicao_final[df_exibicao_final["Técnico"] == "TOTAL"].index) if "Técnico" in df_exibicao_final.columns else []
             return ['font-weight: bold; background-color: #f0f2f6;' if v else '' for v in is_total]
 
-        st.subheader(f"Mapa de Produtividade - {meses_pt[mes_selecionado]} {ano_corrente}")
+        st.subheader(f"Mapa de Produtividade - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
         st.dataframe(
             df_exibicao_final.style.apply(destacar_total, axis=1).format({
                 "Horas potencial dia": "{:.1f}",
@@ -467,9 +467,9 @@ else:
         )
 
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
-        st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado]} {ano_corrente}")
+        st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
         
-        # 1. Carregamento de Orçamentos com Fallback
+        # 1. Carregamento de Orçamentos
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
@@ -483,7 +483,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Carregamento de Faturação CSV com Fallback
+        # 2. Carregamento de Faturação CSV
         df_fact_total = pd.DataFrame()
         csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
         if all(f is None for f in csv_fontes):
@@ -539,7 +539,7 @@ else:
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(val_series, errors="coerce").fillna(0.0)
 
-            # 3. Mapeamento e Agrupamento Flexível
+            # 3. Mapeamento e Agrupamento
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
@@ -586,71 +586,30 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL - Leitura Híbrida (Linhas ou Colunas)
+            # 4. ORÇAMENTO MENSAL - Leitura exata baseada na estrutura (Col A = Oficina, Col D = Mês, Col E = Valor)
             orcamento_mensal = 0.0
-            if not df_orc.empty:
-                col_orc_ofic = df_orc.columns[0]
-                df_orc["Oficina_Clean"] = df_orc[col_orc_ofic].apply(limpar_str)
-                match_orc = df_orc[df_orc["Oficina_Clean"] == sel_clean]
-                if match_orc.empty:
-                    match_orc = df_orc[df_orc["Oficina_Clean"].str.contains(sel_clean, na=False)]
+            if not df_orc.empty and len(df_orc.columns) >= 5:
+                col_ofic = df_orc.columns[0]  # Coluna A
+                col_mes = df_orc.columns[3]   # Coluna D (Mês)
+                col_val = df_orc.columns[4]   # Coluna E (Valor)
                 
-                if not match_orc.empty:
-                    nome_mes_pt = meses_pt[mes_selecionado].upper()
-                    sigla_m = meses_sigla[mes_selecionado].upper()
+                df_orc["Oficina_Clean"] = df_orc[col_ofic].apply(limpar_str)
+                nome_mes_alvo = meses_pt[mes_selecionado].upper() # ex: "NOVEMBRO"
+                
+                for _, row in df_orc.iterrows():
+                    ofic_row = str(row["Oficina_Clean"])
+                    mes_row = limpar_str(row[col_mes]) # ex: "novembro"
                     
-                    val_encontrado = None
-                    
-                    # Tenta primeiro ver se existe uma coluna com o nome do mês
-                    for row_idx, row_orc in match_orc.iterrows():
-                        for col in df_orc.columns:
-                            col_str = str(col).upper()
-                            if nome_mes_pt in col_str or sigla_m in col_str:
-                                val_c = row_orc[col]
-                                try:
-                                    v_num = float(str(val_c).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
-                                    if v_num > 0:
-                                        val_encontrado = v_num
-                                        break
-                                except:
-                                    pass
-                        if val_encontrado is not None:
-                            break
-                            
-                    # Se não encontrou por coluna, verifica se a própria tabela tem linhas por mês e colunas de valor
-                    if val_encontrado is None:
-                        for row_idx, row_orc in match_orc.iterrows():
-                            for col in df_orc.columns:
-                                val_c = row_orc[col]
-                                val_str_up = str(val_c).upper()
-                                if nome_mes_pt in val_str_up or sigla_m in val_str_up:
-                                    # Procura um valor numérico nas colunas vizinhas da mesma linha
-                                    for col_sub in df_orc.columns:
-                                        if col_sub != col:
-                                            try:
-                                                v_num = float(str(row_orc[col_sub]).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
-                                                if v_num > 50:
-                                                    val_encontrado = v_num
-                                                    break
-                                            except:
-                                                pass
-                            if val_encontrado is not None:
-                                break
-
-                    # Fallback padrão: se tiver coluna índice correspondente ao mês
-                    if val_encontrado is None and len(match_orc) > 0:
-                        row_orc = match_orc.iloc[0]
-                        for col in df_orc.columns[1:]:
+                    if sel_clean in ofic_row or ofic_row in sel_clean:
+                        if nome_mes_alvo in mes_row or mes_row in nome_mes_alvo:
                             try:
-                                v_num = float(str(row_orc[col]).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
-                                if v_num > 500:
-                                    val_encontrado = v_num
+                                v_num = float(str(row[col_val]).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
+                                if v_num > 0:
+                                    orcamento_mensal = v_num
                                     break
                             except:
                                 pass
-
-                    orcamento_mensal = val_encontrado if val_encontrado is not None else 0.0
-                    
+                                
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
             orcamentos_ac = []
