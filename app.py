@@ -296,42 +296,4 @@ else:
                 })
 
     df_sem_prod_final = pd.DataFrame(linhas_sem_produtivo)
-    df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True) if not df_sem_prod_final.empty else df_exibicao_tecnicos
-
-    if not st.session_state.acesso_total:
-        def oficina_permitida(oficina):
-            oficina_up = str(oficina).upper()
-            for permitida in st.session_state.oficinas_autorizadas:
-                if permitida in oficina_up or oficina_up in permitida:
-                    return True
-            return False
-        df_completo = df_completo[df_completo["Oficina"].apply(oficina_permitida)]
-
-    with container_filtros:
-        st.header("Filtros")
-        locais_unicos = sorted(df_completo["Local"].dropna().astype(str).unique().tolist())
-        locais_disponiveis = (["Todas"] + locais_unicos) if len(locais_unicos) > 1 else locais_unicos
-        sel_local = st.selectbox("Selecionar Cidade (Local)", locais_disponiveis if locais_disponiveis else ["Sem acesso"])
-
-        df_filtrado_local = df_completo[df_completo["Local"] == sel_local] if sel_local != "Todas" else df_completo
-
-        oficinas_unicas = sorted(df_filtrado_local["Oficina"].dropna().astype(str).unique().tolist())
-        oficinas_disponiveis = (["Todas"] + oficinas_unicas) if len(oficinas_unicas) > 1 else oficinas_unicas
-        sel_oficina = st.selectbox("Selecionar Oficina", oficinas_disponiveis if oficinas_disponiveis else ["Sem acesso"])
-
-    df_final_filtro = df_filtrado_local[df_filtrado_local["Oficina"] == sel_oficina] if sel_oficina != "Todas" else df_filtrado_local
-
-    tot_h_potencial = df_final_filtro["Horas potencial dia"].sum() if "Horas potencial dia" in df_final_filtro.columns else 0.0
-    tot_h_reais = df_final_filtro["Horas reais dia"].sum() if "Horas reais dia" in df_final_filtro.columns else 0.0
-    tot_ausencias = df_final_filtro["Ausencias"].sum() if "Ausencias" in df_final_filtro.columns else 0.0
-    tot_h_disp = df_final_filtro["Horas disponiveis"].sum()
-    tot_h_fact = df_final_filtro["Horas facturadas"].sum()
-    tot_prod = (tot_h_fact / tot_h_disp * 100) if tot_h_disp > 0 else 0.0
-
-    linha_total = {
-        "Técnico": "TOTAL",
-        "Local": "-",
-        "Oficina": "-",
-        "Função": "-",
-        "Horas potencial dia": tot_h_potencial,
-        "Horas reais dia": tot_h
+    df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True
