@@ -531,7 +531,6 @@ else:
             if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
                 df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="mixed", dayfirst=True, errors="coerce")
 
-            # Conversão robusta de valores numéricos
             val_series = df_fact_total[col_valor_f]
             if val_series.dtype == object:
                 s_clean = val_series.astype(str).str.replace("€", "", regex=False).str.strip()
@@ -561,7 +560,6 @@ else:
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
                 
-            # Filtro Fuzzy/Flexível para a Oficina (ignora maiúsculas, espaços e acentos)
             def limpar_str(s):
                 if pd.isna(s): return ""
                 s_nfkd = unicodedata.normalize('NFKD', str(s))
@@ -570,7 +568,6 @@ else:
             sel_clean = limpar_str(oficina_selecionada_fat)
             df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean]
             
-            # Se não encontrar por igualdade exata limpa, tenta correspondência parcial (contains)
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False)]
             
@@ -589,28 +586,47 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL - Correspondência Flexível e Robusta
+            # 4. ORÇAMENTO MENSAL - Extração Ultra-Robusta (Varre qualquer coluna numérica ou correspondência de mês)
             orcamento_mensal = 0.0
             if not df_orc.empty:
                 col_orc_ofic = df_orc.columns[0]
-                col_orc_val = df_orc.columns[2] if len(df_orc.columns) > 2 else df_orc.columns[1]
-                
-                # Procura flexível na tabela de orçamento
                 df_orc["Oficina_Clean"] = df_orc[col_orc_ofic].apply(limpar_str)
                 match_orc = df_orc[df_orc["Oficina_Clean"] == sel_clean]
                 if match_orc.empty:
                     match_orc = df_orc[df_orc["Oficina_Clean"].str.contains(sel_clean, na=False)]
                 
                 if not match_orc.empty:
-                    val_raw = match_orc.iloc[0][col_orc_val]
-                    if isinstance(val_raw, (int, float)):
-                        orcamento_mensal = float(val_raw)
-                    else:
-                        val_limpo = str(val_raw).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
-                        try:
-                            orcamento_mensal = float(val_limpo)
-                        except:
-                            orcamento_mensal = 0.0
+                    row_orc = match_orc.iloc[0]
+                    # Tenta procurar uma coluna com o nome do mês (ex: "Novembro", "Nov") ou o número do mês
+                    nome_mes_pt = meses_pt[mes_selecionado].upper()
+                    sigla_m = meses_sigla[mes_selecionado].upper()
+                    
+                    val_encontrado = None
+                    for col in df_orc.columns:
+                        col_str = str(col).upper()
+                        if nome_mes_pt in col_str or sigla_m in col_str or str(mes_selecionado) in col_str:
+                            val_c = row_orc[col]
+                            try:
+                                v_num = float(str(val_c).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
+                                if v_num > 100:  # Um orçamento mensal razoável
+                                    val_encontrado = v_num
+                                    break
+                            except:
+                                pass
+                                
+                    # Se não encontrou pela coluna do mês, varre todas as colunas numéricas da linha
+                    if val_encontrado is None:
+                        for col in df_orc.columns:
+                            val_c = row_orc[col]
+                            try:
+                                v_num = float(str(val_c).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
+                                if v_num > 500:  # Valor típico de orçamento mensal de oficina
+                                    val_encontrado = v_num
+                                    break
+                            except:
+                                pass
+                                
+                    orcamento_mensal = val_encontrado if val_encontrado is not None else 0.0
                     
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
