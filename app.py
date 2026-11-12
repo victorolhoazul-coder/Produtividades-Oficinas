@@ -219,8 +219,99 @@ elif file_mecanicos and file_hf:
                 local_val = dict_oficina_local.get(oficina_val.upper(), "Outro")
                 if local_val == "Outro":
                     of_upper = oficina_val.upper()
-                    if "BEJA" in of_upper: local_val = "Beja"
-                    elif "PORTIMÃO" in of_upper or "PORTIMAO" in of_upper: local_val = "Portimão"
-                    elif "ÉVORA" in of_upper or "EVORA" in of_upper: local_val = "Évora"
-                    elif "FARO" in of_upper: local_val = "Faro"
-                    elif "SETÚBAL" in of_upper or "SETUBAL" in of_upper: local_val = "
+                    if "BEJA" in of_upper: 
+                        local_val = "Beja"
+                    elif "PORTIMÃO" in of_upper or "PORTIMAO" in of_upper: 
+                        local_val = "Portimão"
+                    elif "ÉVORA" in of_upper or "EVORA" in of_upper: 
+                        local_val = "Évora"
+                    elif "FARO" in of_upper: 
+                        local_val = "Faro"
+                    elif "SETÚBAL" in of_upper or "SETUBAL" in of_upper: 
+                        local_val = "Setúbal"
+                    elif "SINES" in of_upper: 
+                        local_val = "Sines"
+
+                linhas_sem_produtivo.append({
+                    "Técnico": "Sem produtivo",
+                    "Local": local_val,
+                    "Oficina": oficina_val,
+                    "Função": "Sem Produtivo",
+                    "Horas potencial dia": 0.0,
+                    "Horas reais dia": 0.0,
+                    "Ausencias": 0.0,
+                    "Horas disponiveis": 0.0,
+                    "Horas facturadas": horas_fact_val,
+                    "Produtividade %": 0.0
+                })
+
+    df_sem_prod_final = pd.DataFrame(linhas_sem_produtivo)
+    df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True) if not df_sem_prod_final.empty else df_exibicao_tecnicos
+
+    # APLICAR RESTRIÇÃO DE PERFIL DE FORMA FLEXÍVEL
+    if not st.session_state.acesso_total:
+        def oficina_permitida(oficina):
+            oficina_up = str(oficina).upper()
+            for permitida in st.session_state.oficinas_autorizadas:
+                if permitida in oficina_up or oficina_up in permitida:
+                    return True
+            return False
+        df_completo = df_completo[df_completo["Oficina"].apply(oficina_permitida)]
+
+    with container_filtros:
+        st.header("Filtros")
+        locais_unicos = sorted(df_completo["Local"].dropna().astype(str).unique().tolist())
+        locais_disponiveis = (["Todas"] + locais_unicos) if len(locais_unicos) > 1 else locais_unicos
+        sel_local = st.selectbox("Selecionar Cidade (Local)", locais_disponiveis if locais_disponiveis else ["Sem acesso"])
+
+        df_filtrado_local = df_completo[df_completo["Local"] == sel_local] if sel_local != "Todas" else df_completo
+
+        oficinas_unicas = sorted(df_filtrado_local["Oficina"].dropna().astype(str).unique().tolist())
+        oficinas_disponiveis = (["Todas"] + oficinas_unicas) if len(oficinas_unicas) > 1 else oficinas_unicas
+        sel_oficina = st.selectbox("Selecionar Oficina", oficinas_disponiveis if oficinas_disponiveis else ["Sem acesso"])
+
+    df_final_filtro = df_filtrado_local[df_filtrado_local["Oficina"] == sel_oficina] if sel_oficina != "Todas" else df_filtrado_local
+
+    tot_h_potencial = df_final_filtro["Horas potencial dia"].sum() if "Horas potencial dia" in df_final_filtro.columns else 0.0
+    tot_h_reais = df_final_filtro["Horas reais dia"].sum() if "Horas reais dia" in df_final_filtro.columns else 0.0
+    tot_ausencias = df_final_filtro["Ausencias"].sum() if "Ausencias" in df_final_filtro.columns else 0.0
+    tot_h_disp = df_final_filtro["Horas disponiveis"].sum()
+    tot_h_fact = df_final_filtro["Horas facturadas"].sum()
+    tot_prod = (tot_h_fact / tot_h_disp * 100) if tot_h_disp > 0 else 0.0
+
+    linha_total = {
+        "Técnico": "TOTAL",
+        "Local": "-",
+        "Oficina": "-",
+        "Função": "-",
+        "Horas potencial dia": tot_h_potencial,
+        "Horas reais dia": tot_h_reais,
+        "Ausencias": tot_ausencias,
+        "Horas disponiveis": tot_h_disp,
+        "Horas facturadas": tot_h_fact,
+        "Produtividade %": tot_prod
+    }
+
+    df_exibicao_final = pd.concat([df_final_filtro, pd.DataFrame([linha_total])], ignore_index=True)
+
+    def destacar_total(s):
+        is_total = s.index.isin(df_exibicao_final[df_ex_ibicao_final["Técnico"] == "TOTAL"].index) if "Técnico" in df_exibicao_final.columns else []
+        return ['font-weight: bold; background-color: #f0f2f6;' if v else '' for v in is_total]
+
+    st.subheader(f"Mapa de Produtividade - {meses_pt[mes_selecionado]} {ano_corrente}")
+    st.dataframe(
+        df_exibicao_final.style.apply(destacar_total, axis=1).format({
+            "Horas potencial dia": "{:.1f}",
+            "Horas reais dia": "{:.1f}",
+            "Ausencias": "{:.1f}",
+            "Horas disponiveis": "{:.1f}",
+            "Horas facturadas": "{:.2f}",
+            "Produtividade %": "{:.1f}%"
+        }, na_rep="-"),
+        use_container_width=True
+    )
+else:
+    with container_filtros:
+        st.header("Filtros")
+        st.caption("Carregue os ficheiros abaixo para ativar os filtros.")
+    st.info("👈 Por favor, carregue a **tabela de mecânicos** e o **comparativo de horas** no fundo da barra lateral para gerar o relatório.")
