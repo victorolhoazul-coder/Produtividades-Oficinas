@@ -12,7 +12,11 @@ meses_pt = {
     9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
 
+# 0. RESERVAR ESPAÇO PARA O LOGIN NO TOPO DA BARRA LATERAL
+container_login = st.sidebar.container()
+
 # 1. SECÇÃO: PARÂMETROS DO MÊS
+st.sidebar.markdown("---")
 st.sidebar.header("Parâmetros do Mês")
 mes_atual_num = datetime.now().month
 
@@ -50,18 +54,56 @@ st.sidebar.progress(
     text=f"Progresso: {dias_decorridos} de {dias_uteis_padrao_mes} dias ({percentagem_progresso:.1f}%)"
 )
 
-# 2. RESERVAR ESPAÇO PARA OS FILTROS (SEMPRE ACIMA DOS UPLOADS)
+# 2. RESERVAR ESPAÇO PARA OS FILTROS
 st.sidebar.markdown("---")
 container_filtros = st.sidebar.container()
 
 # 3. SECÇÃO: CARREGAR FICHEIROS EXCEL (NO FUNDO)
 st.sidebar.markdown("---")
 st.sidebar.header("Carregar Ficheiros Excel")
+file_perfis = st.sidebar.file_uploader("Carregar 'perfis_utilizadores.xlsx'", type=["xlsx"])
 file_mecanicos = st.sidebar.file_uploader("Carregar 'tabela mecânicos.xlsx'", type=["xlsx"])
 file_hf = st.sidebar.file_uploader("Carregar 'Comparativo de Horas'", type=["xlsx"])
 file_ausencias = st.sidebar.file_uploader("Carregar 'Listagem de Ausencias'", type=["xlsx"])
 
-if file_mecanicos and file_hf:
+# LÓGICA DE AUTENTICAÇÃO
+utilizador_autenticado = False
+oficinas_autorizadas = []
+acesso_total = False
+
+with container_login:
+    st.header("Acesso / Login")
+    if file_perfis:
+        df_perfis = pd.read_excel(file_perfis)
+        df_perfis["Utilizador_clean"] = df_perfis["Utilizador"].astype(str).str.strip().str.lower()
+        df_perfis["password_clean"] = df_perfis["password"].astype(str).str.strip()
+
+        user_input = st.text_input("Utilizador:").strip().lower()
+        pass_input = st.text_input("Password:", type="password").strip()
+
+        if user_input and pass_input:
+            match = df_perfis[(df_perfis["Utilizador_clean"] == user_input) & (df_perfis["password_clean"] == pass_input)]
+            if not match.empty:
+                utilizador_autenticado = True
+                nome_real = match.iloc[0]["Utilizador"]
+                permissoes_str = str(match.iloc[0]["Oficinas permitidas"]).strip()
+                st.success(f"Bem-vindo, {nome_real}!")
+                
+                if permissoes_str.lower() == "todas":
+                    acesso_total = True
+                else:
+                    oficinas_autorizadas = [o.strip().upper() for o in permissoes_str.split(",") if o.strip()]
+            else:
+                st.error("Utilizador ou password incorretos.")
+    else:
+        st.caption("Carregue o ficheiro de perfis no fundo da barra lateral.")
+
+# PROCESSAMENTO DOS DADOS (APENAS SE AUTENTICADO E FICHEIROS CARREGADOS)
+if not file_perfis:
+    st.info("👈 Por favor, carregue o ficheiro **perfis_utilizadores.xlsx** no fundo da barra lateral.")
+elif not utilizador_autenticado:
+    st.warning("🔒 Por favor, introduza o seu **Utilizador** e **Password** no topo da barra lateral para aceder aos relatórios.")
+elif file_mecanicos and file_hf:
     xl = pd.ExcelFile(file_mecanicos)
     df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
     df_hf = pd.read_excel(file_hf)
@@ -161,15 +203,21 @@ if file_mecanicos and file_hf:
     df_sem_prod_final = pd.DataFrame(linhas_sem_produtivo)
     df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True) if not df_sem_prod_final.empty else df_exibicao_tecnicos
 
+    # APLICAR RESTRIÇÃO DE PERFIL AOS DADOS ANTES DOS FILTROS
+    if not acesso_total:
+        df_completo = df_completo[df_completo["Oficina"].str.upper().isin(oficinas_autorizadas)]
+
     with container_filtros:
         st.header("Filtros")
-        locais_disponiveis = ["Todas"] + sorted(df_completo["Local"].dropna().astype(str).unique().tolist())
-        sel_local = st.selectbox("Selecionar Cidade (Local)", locais_disponiveis)
+        locais_unicos = sorted(df_completo["Local"].dropna().astype(str).unique().tolist())
+        locais_disponiveis = (["Todas"] + locais_unicos) if len(locais_unicos) > 1 else locais_unicos
+        sel_local = st.selectbox("Selecionar Cidade (Local)", locais_disponiveis if locais_disponiveis else ["Sem acesso"])
 
         df_filtrado_local = df_completo[df_completo["Local"] == sel_local] if sel_local != "Todas" else df_completo
 
-        oficinas_disponiveis = ["Todas"] + sorted(df_filtrado_local["Oficina"].dropna().astype(str).unique().tolist())
-        sel_oficina = st.selectbox("Selecionar Oficina", oficinas_disponiveis)
+        oficinas_unicas = sorted(df_filtrado_local["Oficina"].dropna().astype(str).unique().tolist())
+        oficinas_disponiveis = (["Todas"] + oficinas_unicas) if len(oficinas_unicas) > 1 else oficinas_unicas
+        sel_oficina = st.selectbox("Selecionar Oficina", oficinas_disponiveis if oficinas_disponiveis else ["Sem acesso"])
 
     df_final_filtro = df_filtrado_local[df_filtrado_local["Oficina"] == sel_oficina] if sel_oficina != "Todas" else df_filtrado_local
 
