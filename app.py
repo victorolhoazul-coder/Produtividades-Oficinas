@@ -481,26 +481,15 @@ else:
         
         df_fact_total = pd.DataFrame()
         
-        # Leitura inteligente dos CSVs procurando a linha de cabeçalho correta
+        # Leitura dos mapas de faturação (com skiprows=5 garantido)
         for file_f in [file_fact1_up, file_fact2_up]:
             if file_f is not None:
                 try:
                     file_f.seek(0)
-                    sample_bytes = file_f.read(2048)
-                    file_f.seek(0)
-                    
-                    # Tenta detetar skiprows automaticamente procurando uma linha com "Data" ou "Oficina"
-                    skip_val = 5
-                    lines = sample_bytes.decode("iso-8859-1", errors="ignore").splitlines()
-                    for idx, line in enumerate(lines[:10]):
-                        if "data" in line.lower() or "oficina" in line.lower() or "designação" in line.lower():
-                            skip_val = idx
-                            break
-                    
-                    t_temp = pd.read_csv(file_f, sep=";", encoding="iso-8859-1", skiprows=skip_val)
+                    t_temp = pd.read_csv(file_f, sep=";", encoding="iso-8859-1", skiprows=5)
                     if len(t_temp.columns) < 3:
                         file_f.seek(0)
-                        t_temp = pd.read_csv(file_f, sep=",", encoding="iso-8859-1", skiprows=skip_val)
+                        t_temp = pd.read_csv(file_f, sep=",", encoding="iso-8859-1", skiprows=5)
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
                 except Exception as e:
@@ -522,7 +511,6 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV de faturação na barra lateral (Admin).")
         else:
-            # Limpeza e normalização dos nomes das colunas
             df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
             
             col_oficina_f = df_fact_total.columns[0]
@@ -543,6 +531,7 @@ else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(val_series, errors="coerce").fillna(0.0)
 
             if not df_agrup.empty:
+                df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
                 col_agrup_destino = df_agrup.columns[3] if len(df_agrup.columns) > 3 else df_agrup.columns[1]
                 
@@ -553,14 +542,14 @@ else:
 
             oficinas_disponiveis_fat = sorted(df_fact_total["Oficina_Agrupada"].unique().tolist())
             if not df_orc.empty:
-                oficinas_orc_unicas = sorted(df_orc["Oficina"].astype(str).str.strip().unique().tolist())
+                df_orc.columns = [str(c).strip() for c in df_orc.columns]
+                oficinas_orc_unicas = sorted(df_orc[df_orc.columns[0]].astype(str).str.strip().unique().tolist())
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
             col_sel_ofic, col_empty = st.columns([2, 2])
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
                 
-            # Filtro case-insensitive robusto para a oficina selecionada
             df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].astype(str).str.upper().str.strip() == oficina_selecionada_fat.upper().strip()]
             
             df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
@@ -580,17 +569,22 @@ else:
             
             orcamento_mensal = 0.0
             if not df_orc.empty:
-                df_orc.columns = [str(c).strip() for c in df_orc.columns]
                 col_orc_ofic = df_orc.columns[0]
                 col_orc_val = df_orc.columns[2] if len(df_orc.columns) > 2 else df_orc.columns[1]
                 col_orc_data = df_orc.columns[1] if len(df_orc.columns) > 2 else df_orc.columns[0]
                 
                 df_orc["Data_Parsed"] = pd.to_datetime(df_orc[col_orc_data], format="mixed", errors="coerce")
+                
                 match_orc = df_orc[
                     (df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()) & 
                     (df_orc["Data_Parsed"].dt.year == ano_corrente) & 
                     (df_orc["Data_Parsed"].dt.month == mes_selecionado)
                 ]
+                
+                if match_orc.empty:
+                    # Tenta correspondência flexível apenas por nome da oficina se a data não coincidir exatamente
+                    match_orc = df_orc[df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()]
+                
                 if not match_orc.empty:
                     orcamento_mensal = float(match_orc.iloc[0][col_orc_val])
                     
