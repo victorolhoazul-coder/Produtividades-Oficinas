@@ -175,6 +175,8 @@ tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.
 file_mecanicos_up = None
 file_hf_up = None
 file_ausencias_up = None
+file_fact_up = None
+file_orc_up = None
 
 if tem_permissao_upload:
     st.sidebar.markdown("---")
@@ -182,6 +184,8 @@ if tem_permissao_upload:
     file_mecanicos_up = st.sidebar.file_uploader("Substituir 'tabela mecânicos'", type=["xlsx"])
     file_hf_up = st.sidebar.file_uploader("Substituir 'Comparativo de Horas'", type=["xlsx"])
     file_ausencias_up = st.sidebar.file_uploader("Substituir 'Listagem de Ausencias'", type=["xlsx"])
+    file_fact_up = st.sidebar.file_uploader("Substituir 'Mapa de Faturação' (CSV)", type=["csv"])
+    file_orc_up = st.sidebar.file_uploader("Substituir 'Orçamento-agrupamento oficinas' (XLSX)", type=["xlsx"])
 
 st.sidebar.markdown("---")
 container_login = st.sidebar.container()
@@ -462,126 +466,3 @@ else:
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado]} {ano_corrente}")
         
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
-        df_orc = pd.DataFrame()
-        df_agrup = pd.DataFrame()
-        
-        if os.path.exists(excel_orc_path):
-            try:
-                df_orc = pd.read_excel(excel_orc_path, sheet_name="Oficina_ORÇAMENTO")
-                df_agrup = pd.read_excel(excel_orc_path, sheet_name="Agrupamento_oficinas")
-            except Exception as e:
-                st.error(f"Erro ao ler o ficheiro de orçamentos e agrupamentos: {e}")
-        
-        csv_fact_files = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
-        if not csv_fact_files:
-            csv_fact_files = glob.glob("*FACTURAÇÃO*.csv")
-            
-        df_fact_total = pd.DataFrame()
-        for f in csv_fact_files:
-            try:
-                temp_df = pd.read_csv(f, sep=";", encoding="iso-8859-1", skiprows=5)
-                if not temp_df.empty:
-                    df_fact_total = pd.concat([df_fact_total, temp_df], ignore_index=True)
-            except Exception as e:
-                pass
-                
-        if df_fact_total.empty:
-            st.warning("⚠️ Não foram encontrados ficheiros de mapa de faturação válidos para o período selecionado.")
-        else:
-            col_oficina_f = df_fact_total.columns[0]
-            col_data_f = next((c for c in df_fact_total.columns if "Data" in c and "Factura" in c), df_fact_total.columns[28])
-            col_valor_f = next((c for c in ["Total Liquido S/IVA", "Valor Liquido (M.O.)", "Valor Liquido (Peças)"] if c in df_fact_total.columns), df_fact_total.columns[24])
-            
-            df_fact_total["Oficina_CSV"] = df_fact_total[col_oficina_f].astype(str).str.strip()
-            df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="%d-%m-%Y", errors="coerce")
-            
-            if df_fact_total[col_valor_f].dtype == object:
-                df_fact_total["Valor_Num"] = df_fact_total[col_valor_f].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-                df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total["Valor_Num"], errors="coerce").fillna(0.0)
-            else:
-                df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total[col_valor_f], errors="coerce").fillna(0.0)
-
-            if not df_agrup.empty:
-                col_agrup_oficina = df_agrup.columns[0]
-                col_agrup_destino = df_agrup.columns[3] if len(df_agrup.columns) > 3 else df_agrup.columns[1]
-                
-                dict_agrupamento = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip().str.upper(), df_agrup[col_agrup_destino].astype(str).str.strip()))
-                df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"].str.upper().map(dict_agrupamento).fillna(df_fact_total["Oficina_CSV"])
-            else:
-                df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
-
-            oficinas_disponiveis_fat = sorted(df_fact_total["Oficina_Agrupada"].unique().tolist())
-            if not df_orc.empty:
-                oficinas_orc_unicas = sorted(df_orc["Oficina"].astype(str).str.strip().unique().tolist())
-                oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
-            
-            col_sel_ofic, col_empty = st.columns([2, 2])
-            with col_sel_ofic:
-                oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
-                
-            df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].astype(str).str.upper() == oficina_selecionada_fat.upper()]
-            
-            df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
-            df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
-            df_diario = df_diario.sort_values("Data")
-            
-            inicio_mes = date(ano_corrente, mes_selecionado, 1)
-            if mes_selecionado == 12:
-                fim_mes = date(ano_corrente + 1, 1, 1) - timedelta(days=1)
-            else:
-                fim_mes = date(ano_corrente, mes_selecionado + 1, 1) - timedelta(days=1)
-                
-            range_dias = pd.date_range(start=inicio_mes, end=fim_mes)
-            df_completo_dias = pd.DataFrame({"Data": range_dias.date})
-            df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
-            df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
-            
-            orcamento_mensal = 0.0
-            if not df_orc.empty:
-                df_orc["Data_Parsed"] = pd.to_datetime(df_orc["Data"], errors="coerce")
-                match_orc = df_orc[
-                    (df_orc["Oficina"].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper()) & 
-                    (df_orc["Data_Parsed"].dt.year == ano_corrente) & 
-                    (df_orc["Data_Parsed"].dt.month == mes_selecionado)
-                ]
-                if not match_orc.empty:
-                    orcamento_mensal = float(match_orc.iloc[0]["Valor"])
-                    
-            orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
-            
-            orcamentos_ac = []
-            acum = 0.0
-            for d in df_completo_dias["Data"]:
-                if d.weekday() < 5:
-                    acum += orcamento_diario
-                orcamentos_ac.append(acum)
-            df_completo_dias["Orcamento_Acumulado"] = orcamentos_ac
-            
-            facturacao_a_data = df_completo_dias["Facturacao_Acumulada"].iloc[-1]
-            desvio_orcamento = facturacao_a_data - orcamento_mensal
-            
-            col_graf, col_kpi = st.columns([3, 1])
-            
-            with col_graf:
-                base = alt.Chart(df_completo_dias).encode(
-                    x=alt.X('Data:T', title='Data', axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45))
-                )
-                
-                barras = base.mark_bar(color='#115e59').encode(
-                    y=alt.Y('Facturacao_Acumulada:Q', title='Valor (€)'),
-                    tooltip=['Data', 'Facturacao_Diaria', 'Facturacao_Acumulada']
-                )
-                
-                linha_orc = base.mark_line(color='#f97316', strokeWidth=3).encode(
-                    y='Orcamento_Acumulado:Q',
-                    tooltip=['Data', 'Orcamento_Acumulado']
-                )
-                
-                chart = (barras + linha_orc).properties(height=400).interactive()
-                st.altair_chart(chart, use_container_width=True)
-                
-            with col_kpi:
-                st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.2f} €".replace(",", " ").replace(".", ","), delta=f"{desvio_orcamento:,.2f} €")
