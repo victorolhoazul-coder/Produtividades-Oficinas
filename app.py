@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import os
 
 st.set_page_config(page_title="Relatório de Produtividade - Oficinas", layout="wide")
@@ -9,15 +9,15 @@ st.set_page_config(page_title="Relatório de Produtividade - Oficinas", layout="
 st.markdown("""
     <style>
     div.stButton > button:first-child {
-        background-color: #d1d5db;
-        color: #1f2937;
-        border: 1px solid #9ca3af;
-        font-weight: 500;
-    }
-    div.stButton > button:first-child:hover {
         background-color: #9ca3af;
         color: #ffffff;
-        border: 1px solid #6b7280;
+        border: 1px solid #4b5563;
+        font-weight: 600;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #6b7280;
+        color: #ffffff;
+        border: 1px solid #374151;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -27,7 +27,7 @@ col_titulo, col_logo = st.columns([4, 1])
 with col_titulo:
     st.title("Relatório de Produtividade de Oficinas")
 with col_logo:
-    logo_path = "logo_motorpor.jpg" # Nome sem espaços (garante que o ficheiro no GitHub tem este nome exato)
+    logo_path = "logo_motorpor.jpg"
     if os.path.exists(logo_path):
         st.image(logo_path, width=150)
 
@@ -79,12 +79,47 @@ if st.sidebar.button("Atualizar / Limpar Cache"):
 ultima_atualizacao = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 st.sidebar.caption(f"🔄 Última atualização: {ultima_atualizacao}")
 
-dias_uteis_iniciais = 22
-decorridos_iniciais = 22 if (mes_selecionado < mes_atual_num) else min(8, 22)
+# Função para calcular dias úteis reais do mês selecionado (excluindo fins de semana e feriados)
+def calcular_dias_uteis_mes(ano, mes):
+    if mes == 12:
+        proximo_mes = date(ano + 1, 1, 1)
+    else:
+        proximo_mes = date(ano, mes + 1, 1)
+    inicio = date(ano, mes, 1)
+    fim = proximo_mes - timedelta(days=1)
+    
+    feriados = [
+        date(ano, 1, 1),   # Ano Novo
+        date(ano, 4, 25),  # Dia da Liberdade
+        date(ano, 5, 1),   # Dia do Trabalhador
+        date(ano, 6, 10),  # Dia de Portugal
+        date(ano, 8, 15),  # Assunção de Nossa Senhora
+        date(ano, 10, 5),  # Implantação da República
+        date(ano, 12, 1),  # Restauração da Independência
+        date(ano, 12, 8),  # Imaculada Conceição
+        date(ano, 12, 25), # Natal
+    ]
+    
+    if ano == 2026:
+        feriados.extend([
+            date(2026, 4, 3),   # Sexta-Feira Santa
+            date(2026, 6, 4),   # Corpo de Deus
+        ])
+        
+    dias_uteis = 0
+    atual = inicio
+    while atual <= fim:
+        if atual.weekday() < 5 and atual not in feriados:
+            dias_uteis += 1
+        atual += timedelta(days=1)
+    return dias_uteis
+
+dias_uteis_calculados = calcular_dias_uteis_mes(ano_corrente, mes_selecionado)
+decorridos_iniciais = dias_uteis_calculados if (mes_selecionado < mes_atual_num) else min(8, dias_uteis_calculados)
 
 dias_uteis_padrao_mes = st.sidebar.slider(
     f"Total de Dias Úteis ({meses_pt[mes_selecionado]}):", 
-    min_value=18, max_value=25, value=dias_uteis_iniciais
+    min_value=15, max_value=25, value=dias_uteis_calculados
 )
 
 dias_decorridos = st.sidebar.number_input(
