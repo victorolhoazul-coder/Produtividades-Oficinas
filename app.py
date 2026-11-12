@@ -118,7 +118,7 @@ def calcular_dias_uteis_mes(ano, mes, cidade="Nacional (Sem Municipal)"):
         
     cidade_upper = str(cidade).upper()
     if "BEJA" in cidade_upper:
-        feriados.append(date(ano, 5, 14))    # Quinta-feira da Ascensão (exemplo 2026)
+        feriados.append(date(ano, 5, 14))    # Quinta-feira da Ascensão
     elif "ÉVORA" in cidade_upper or "EVORA" in cidade_upper:
         feriados.append(date(ano, 6, 29))    # São Pedro
     elif "PORTIMÃO" in cidade_upper or "PORTIMAO" in cidade_upper:
@@ -215,7 +215,6 @@ with container_login:
             st.session_state.acesso_total = False
             st.rerun()
 
-# Caminhos dinâmicos baseados no mês e ano selecionados
 path_mecanicos = file_mecanicos_up if file_mecanicos_up else ("tabela mecânicos.xlsx" if os.path.exists("tabela mecânicos.xlsx") else None)
 path_hf = file_hf_up if file_hf_up else (f"Comparativo de Horas_{sigla_mes}_{ano_corrente}.xlsx" if os.path.exists(f"Comparativo de Horas_{sigla_mes}_{ano_corrente}.xlsx") else None)
 path_ausencias = f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx" if os.path.exists(f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx") else None
@@ -228,7 +227,6 @@ elif not path_mecanicos or not path_hf:
         st.caption("Aguardando ficheiros de dados.")
     st.warning(f"⚠️ Não foram encontrados os ficheiros padrão no repositório para o período de {meses_pt[mes_selecionado]} {ano_corrente} ({sigla_mes}). Certifique-se de que os carregou para o GitHub ou use o painel de admin.")
 else:
-    # Criar Abas (Tabs) para separar Produtividade e Faturação/Orçamento
     tab_prod, tab_fact = st.tabs(["📊 Produtividade de Oficinas", "💶 Faturação e Orçamento Diário"])
 
     with tab_prod:
@@ -441,8 +439,7 @@ else:
     with tab_fact:
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado]} {ano_corrente}")
         
-        # Carregar Orçamentos e Agrupamentos do novo Excel
-        excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
+        excel_orc_path = "Orcamento-agrupamento_oficinas.xlsx"
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
         
@@ -453,11 +450,9 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos e agrupamentos: {e}")
         
-        # Procurar ficheiros de faturação do mês/ano correspondente na pasta
-        # Padrão esperado: *FACTURAÇÃO*_YYYY_MM.csv ou semelhante
         csv_fact_files = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
         if not csv_fact_files:
-            csv_fact_files = glob.glob("*FACTURAÇÃO*.csv") # fallback se houver apenas um conjunto de teste
+            csv_fact_files = glob.glob("*FACTURAÇÃO*.csv")
             
         df_fact_total = pd.DataFrame()
         for f in csv_fact_files:
@@ -471,7 +466,6 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados ficheiros de mapa de faturação válidos para o período selecionado.")
         else:
-            # Coluna A = Oficina, Coluna Y (ou Valor Liquido S/IVA) = Faturação, Coluna AC = Data Factura
             col_oficina_f = df_fact_total.columns[0]
             col_data_f = next((c for c in df_fact_total.columns if "Data" in c and "Factura" in c), df_fact_total.columns[28])
             col_valor_f = next((c for c in ["Total Liquido S/IVA", "Valor Liquido (M.O.)", "Valor Liquido (Peças)"] if c in df_fact_total.columns), df_fact_total.columns[24])
@@ -479,28 +473,24 @@ else:
             df_fact_total["Oficina_clean"] = df_fact_total[col_oficina_f].astype(str).str.strip()
             df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="%d-%m-%Y", errors="coerce")
             
-            # Limpar valores numéricos (substituir vírgulas por pontos se necessário)
             if df_fact_total[col_valor_f].dtype == object:
-                df_fact_total["Valor_Num"] = df_fact_total[col_valor_f].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
+                df_fact_total["Valor_Num"] = df_fact_total[col_valor_f].astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total["Valor_Num"], errors="coerce").fillna(0.0)
             else:
-                df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total[col_valor_f], errors="fillna").fillna(0.0)
+                df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total[col_valor_f], errors="coerce").fillna(0.0)
 
-            # Obter lista de oficinas disponíveis para filtro no painel lateral / topo da aba
             oficinas_fat_unicas = sorted(df_fact_total["Oficina_clean"].unique().tolist())
             
             col_sel_ofic, col_empty = st.columns([2, 2])
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_fat_unicas)
                 
-            # Filtrar dados para a oficina selecionada
             df_oficina_fat = df_fact_total[df_fact_total["Oficina_clean"] == oficina_selecionada_fat]
             
-            # Agrupar por dia
             df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
             df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
             df_diario = df_diario.sort_values("Data")
             
-            # Criar série completa para todos os dias úteis/corridos do mês
             inicio_mes = date(ano_corrente, mes_selecionado, 1)
             if mes_selecionado == 12:
                 fim_mes = date(ano_corrente + 1, 1, 1) - timedelta(days=1)
@@ -512,7 +502,6 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # Obter Orçamento Mensal do Ficheiro Excel
             orcamento_mensal = 0.0
             if not df_orc.empty:
                 df_orc["Data_Parsed"] = pd.to_datetime(df_orc["Data"], errors="coerce")
@@ -526,11 +515,10 @@ else:
                     
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
-            # Criar linha de orçamento acumulado dia a dia
             orcamentos_ac = []
             acum = 0.0
             for d in df_completo_dias["Data"]:
-                if d.weekday() < 5: # apenas dias úteis para o acréscimo do orçamento diário
+                if d.weekday() < 5:
                     acum += orcamento_diario
                 orcamentos_ac.append(acum)
             df_completo_dias["Orcamento_Acumulado"] = orcamentos_ac
@@ -538,11 +526,9 @@ else:
             facturacao_a_data = df_completo_dias["Facturacao_Acumulada"].iloc[-1]
             desvio_orcamento = facturacao_a_data - orcamento_mensal
             
-            # Layout em colunas: Gráfico à esquerda, KPIs em cartões à direita
             col_graf, col_kpi = st.columns([3, 1])
             
             with col_graf:
-                # Gráfico com Altair (Barras para Faturação Acumulada + Linha para Orçamento Acumulado)
                 base = alt.Chart(df_completo_dias).encode(
                     x=alt.X('Data:T', title='Data', axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45))
                 )
