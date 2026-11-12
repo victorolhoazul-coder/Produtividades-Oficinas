@@ -72,6 +72,12 @@ mes_selecionado = st.sidebar.selectbox(
 )
 ano_corrente = 2026
 
+# Seletor para o feriado municipal por cidade
+cidade_feriado = st.sidebar.selectbox(
+    "Local para Feriados Municipais:",
+    options=["Nacional (Sem Municipal)", "Beja", "Évora", "Portimão", "Faro", "Setúbal", "Sines"]
+)
+
 if st.sidebar.button("Atualizar / Limpar Cache"):
     st.cache_data.clear()
     st.rerun()
@@ -79,8 +85,8 @@ if st.sidebar.button("Atualizar / Limpar Cache"):
 ultima_atualizacao = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 st.sidebar.caption(f"🔄 Última atualização: {ultima_atualizacao}")
 
-# Função para calcular dias úteis reais do mês selecionado (excluindo fins de semana e feriados)
-def calcular_dias_uteis_mes(ano, mes):
+# Função para calcular dias úteis reais do mês selecionado (Nacionais + Municipais)
+def calcular_dias_uteis_mes(ano, mes, cidade="Nacional (Sem Municipal)"):
     if mes == 12:
         proximo_mes = date(ano + 1, 1, 1)
     else:
@@ -106,6 +112,20 @@ def calcular_dias_uteis_mes(ano, mes):
             date(2026, 6, 4),   # Corpo de Deus
         ])
         
+        cidade_upper = str(cidade).upper()
+        if "BEJA" in cidade_upper:
+            feriados.append(date(2026, 5, 14))    # Quinta-feira da Ascensão
+        elif "ÉVORA" in cidade_upper or "EVORA" in cidade_upper:
+            feriados.append(date(2026, 6, 29))    # São Pedro
+        elif "PORTIMÃO" in cidade_upper or "PORTIMAO" in cidade_upper:
+            feriados.append(date(2026, 12, 19))   # Dia de Portimão
+        elif "FARO" in cidade_upper:
+            feriados.append(date(2026, 9, 7))     # Dia de Faro
+        elif "SETÚBAL" in cidade_upper or "SETUBAL" in cidade_upper:
+            feriados.append(date(2026, 9, 15))   # Dia de Setúbal
+        elif "SINES" in cidade_upper:
+            feriados.append(date(2026, 11, 24))   # Dia de Sines
+        
     dias_uteis = 0
     atual = inicio
     while atual <= fim:
@@ -114,7 +134,7 @@ def calcular_dias_uteis_mes(ano, mes):
         atual += timedelta(days=1)
     return dias_uteis
 
-dias_uteis_calculados = calcular_dias_uteis_mes(ano_corrente, mes_selecionado)
+dias_uteis_calculados = calcular_dias_uteis_mes(ano_corrente, mes_selecionado, cidade_feriado)
 decorridos_iniciais = dias_uteis_calculados if (mes_selecionado < mes_atual_num) else min(8, dias_uteis_calculados)
 
 dias_uteis_padrao_mes = st.sidebar.slider(
