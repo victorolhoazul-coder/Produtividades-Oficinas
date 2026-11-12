@@ -481,7 +481,6 @@ else:
         
         df_fact_total = pd.DataFrame()
         
-        # Leitura dos mapas de faturação (com skiprows=5 garantido)
         for file_f in [file_fact1_up, file_fact2_up]:
             if file_f is not None:
                 try:
@@ -582,11 +581,19 @@ else:
                 ]
                 
                 if match_orc.empty:
-                    # Tenta correspondência flexível apenas por nome da oficina se a data não coincidir exatamente
                     match_orc = df_orc[df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()]
                 
                 if not match_orc.empty:
-                    orcamento_mensal = float(match_orc.iloc[0][col_orc_val])
+                    val_raw = match_orc.iloc[0][col_orc_val]
+                    # Conversão segura de valores monetários com símbolos ou formatação regional
+                    if isinstance(val_raw, (int, float)):
+                        orcamento_mensal = float(val_raw)
+                    else:
+                        val_limpo = str(val_raw).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+                        try:
+                            orcamento_mensal = float(val_limpo)
+                        except:
+                            orcamento_mensal = 0.0
                     
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
