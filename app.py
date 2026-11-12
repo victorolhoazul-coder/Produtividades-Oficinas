@@ -468,57 +468,54 @@ else:
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado]} {ano_corrente}")
         
+        # Orçamento com Fallback Automático para o ficheiro local se o upload estiver vazio
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
         
-        if st.session_state.file_orc_up is not None:
+        target_orc_file = st.session_state.file_orc_up if st.session_state.file_orc_up is not None else (excel_orc_path if os.path.exists(excel_orc_path) else None)
+        
+        if target_orc_file is not None:
             try:
-                df_orc = pd.read_excel(st.session_state.file_orc_up, sheet_name="Oficina_ORÇAMENTO")
-                df_agrup = pd.read_excel(st.session_state.file_orc_up, sheet_name="Agrupamento_oficinas")
+                df_orc = pd.read_excel(target_orc_file, sheet_name="Oficina_ORÇAMENTO")
+                df_agrup = pd.read_excel(target_orc_file, sheet_name="Agrupamento_oficinas")
             except Exception as e:
-                st.error(f"Erro ao ler o ficheiro carregado de orçamentos: {e}")
-        elif os.path.exists(excel_orc_path):
-            try:
-                df_orc = pd.read_excel(excel_orc_path, sheet_name="Oficina_ORÇAMENTO")
-                df_agrup = pd.read_excel(excel_orc_path, sheet_name="Agrupamento_oficinas")
-            except Exception as e:
-                st.error(f"Erro ao ler o ficheiro de orçamentos e agrupamentos: {e}")
+                st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
         df_fact_total = pd.DataFrame()
         
-        for file_f in [st.session_state.file_fact1_up, st.session_state.file_fact2_up]:
+        # Ficheiros CSV de Faturação com Fallback Automático para a pasta local se o upload estiver vazio
+        csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
+        if all(f is None for f in csv_fontes):
+            csv_fontes = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
+            if not csv_fontes:
+                csv_fontes = glob.glob("*FACTURAÇÃO*.csv")
+                
+        for file_f in csv_fontes:
             if file_f is not None:
                 try:
-                    file_f.seek(0)
-                    for skip in [5, 4, 3, 2, 6, 0]:
+                    if hasattr(file_f, "seek"):
                         file_f.seek(0)
-                        t_temp = pd.read_csv(file_f, sep=";", encoding="iso-8859-1", skiprows=skip)
+                    for skip in [5, 4, 3, 2, 6, 0]:
+                        if hasattr(file_f, "seek"):
+                            file_f.seek(0)
+                        try:
+                            t_temp = pd.read_csv(file_f, sep=";", encoding="iso-8859-1", skiprows=skip)
+                        except:
+                            t_temp = pd.read_csv(file_f, sep=",", encoding="iso-8859-1", skiprows=skip)
                         if len(t_temp.columns) >= 3 and any("data" in str(c).lower() or "factura" in str(c).lower() for c in t_temp.columns):
                             break
                     if t_temp.empty or len(t_temp.columns) < 3:
-                        file_f.seek(0)
+                        if hasattr(file_f, "seek"):
+                            file_f.seek(0)
                         t_temp = pd.read_csv(file_f, sep=",", encoding="iso-8859-1", skiprows=5)
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
                 except Exception as e:
                     pass
-
-        if df_fact_total.empty:
-            csv_fact_files = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
-            if not csv_fact_files:
-                csv_fact_files = glob.glob("*FACTURAÇÃO*.csv")
-                
-            for f in csv_fact_files:
-                try:
-                    temp_df = pd.read_csv(f, sep=";", encoding="iso-8859-1", skiprows=5)
-                    if not temp_df.empty:
-                        df_fact_total = pd.concat([df_fact_total, temp_df], ignore_index=True)
-                except Exception as e:
-                    pass
                 
         if df_fact_total.empty:
-            st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV de faturação na barra lateral (Admin).")
+            st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV de faturação na barra lateral (Admin) ou coloque-os na pasta do projeto.")
         else:
             df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
             
@@ -532,11 +529,10 @@ else:
             if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
                 df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="mixed", dayfirst=True, errors="coerce")
 
-            # Conversão fiável dos valores numéricos dos CSVs
+            # Conversão robusta de valores numéricos
             val_series = df_fact_total[col_valor_f]
             if val_series.dtype == object:
                 s_clean = val_series.astype(str).str.replace("€", "", regex=False).str.strip()
-                # Se contiver ponto como milhar e vírgula como decimal
                 s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
                 df_fact_total["Valor_Num"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
             else:
@@ -579,7 +575,7 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # ORÇAMENTO MENSAL - Leitura robusta e direta
+            # ORÇAMENTO MENSAL - Resolução Direta e Garantida
             orcamento_mensal = 0.0
             if not df_orc.empty:
                 col_orc_ofic = df_orc.columns[0]
@@ -588,14 +584,12 @@ else:
                 
                 df_orc["Data_Parsed"] = pd.to_datetime(df_orc[col_orc_data], format="mixed", errors="coerce")
                 
-                # Procura exata por oficina, ano e mês
                 match_orc = df_orc[
                     (df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()) & 
                     (df_orc["Data_Parsed"].dt.year == ano_corrente) & 
                     (df_orc["Data_Parsed"].dt.month == mes_selecionado)
                 ]
                 
-                # Se não encontrar por data exata, procura por correspondência exata do nome da oficina
                 if match_orc.empty:
                     match_orc = df_orc[df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()]
                 
