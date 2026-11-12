@@ -125,15 +125,20 @@ elif file_mecanicos and file_hf:
     df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
     df_hf = pd.read_excel(file_hf)
     
-    # PROCESSAMENTO DO FICHEIRO DE AUSÊNCIAS
+    # PROCESSAMENTO DE AUSÊNCIAS (TUDO O QUE NÃO É "Presença" NA COLUNA B)
     df_ausencias = pd.read_excel(file_ausencias) if file_ausencias else pd.DataFrame()
     if not df_ausencias.empty:
-        col_op_aus = next((c for c in ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico"] if c in df_ausencias.columns), df_ausencias.select_dtypes(include=['object']).columns[0])
-        col_val_aus = next((c for c in ["Ausências", "Ausencias", "Horas", "Total", "Dias"] if c in df_ausencias.columns), df_ausencias.select_dtypes(include=['number']).columns[-1])
-        
-        df_ausencias["Técnico_clean"] = df_ausencias[col_op_aus].astype(str).str.strip().str.upper()
-        df_ausencias_grouped = df_ausencias.groupby("Técnico_clean", as_index=False)[col_val_aus].sum()
-        df_ausencias_grouped.rename(columns={col_val_aus: "Ausencias_calc", "Técnico_clean": "Técnico_clean"}, inplace=True)
+        col_desc_aus = df_ausencias.columns[1] if len(df_ausencias.columns) > 1 else None
+        col_op_aus = next((c for c in ["Mecânico (Nome)", "Nome", "Técnico", "Tecnico", "Operário", "Operario"] if c in df_ausencias.columns), df_ausencias.columns[3] if len(df_ausencias.columns) > 3 else df_ausencias.select_dtypes(include=['object']).columns[0])
+        col_val_aus = df_ausencias.select_dtypes(include=['number']).columns[-1]
+
+        if col_desc_aus and col_val_aus:
+            df_aus_filtrado = df_ausencias[df_ausencias[col_desc_aus].astype(str).str.strip().str.lower() != "presença"]
+            df_aus_filtrado["Técnico_clean"] = df_aus_filtrado[col_op_aus].astype(str).str.strip().str.upper()
+            df_ausencias_grouped = df_aus_filtrado.groupby("Técnico_clean", as_index=False)[col_val_aus].sum()
+            df_ausencias_grouped.rename(columns={col_val_aus: "Ausencias_calc"}, inplace=True)
+        else:
+            df_ausencias_grouped = pd.DataFrame(columns=["Técnico_clean", "Ausencias_calc"])
     else:
         df_ausencias_grouped = pd.DataFrame(columns=["Técnico_clean", "Ausencias_calc"])
 
@@ -196,7 +201,7 @@ elif file_mecanicos and file_hf:
     df_hf_grouped = df_hf_known.groupby("Operario_clean", as_index=False)[col_fact].sum()
     df_hf_grouped.rename(columns={col_fact: "Horas facturadas", "Operario_clean": "Técnico_clean"}, inplace=True)
 
-    # UNIR MECÂNICOS COM HORAS FACTURADAS E AUSÊNCIAS
+    # UNIR MECÂNICOS COM HORAS FACTURADAS E AUSÊNCIAS CALCULADAS
     df_merged = pd.merge(df_mecanicos, df_hf_grouped, on="Técnico_clean", how="left")
     if not df_ausencias_grouped.empty:
         df_merged = pd.merge(df_merged, df_ausencias_grouped, on="Técnico_clean", how="left")
@@ -206,9 +211,10 @@ elif file_mecanicos and file_hf:
 
     df_merged["Horas facturadas"] = df_merged["Horas facturadas"].fillna(0.0)
     df_merged["Horas reais dia"] = df_merged["Horas reais dia"].fillna(7.5)
+    
+    # CÁLCULO EXATO: Horas disponíveis = (Dias decorridos * Horas reais dia) - Ausências
     df_merged["Horas disponiveis"] = (dias_decorridos * df_merged["Horas reais dia"]) - df_merged["Ausencias"]
 
-    # ORDEM DE COLUNAS COM "Ausencias" A SEGUIR A "Horas reais dia"
     colunas_finais = [
         "Técnico", "Local", "Oficina", "Função", 
         "Horas potencial dia", "Horas reais dia", "Ausencias",
