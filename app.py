@@ -507,7 +507,7 @@ else:
                                 file_f.seek(0)
                             try:
                                 temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", skiprows=skip, low_memory=False)
-                                if len(temp_df.columns) >= 28:
+                                if len(temp_df.columns) >= 25:
                                     t_temp = temp_df
                                     break
                             except:
@@ -529,7 +529,7 @@ else:
         else:
             df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
             
-            # Mapeamento exato baseado na imagem (Coluna 0 = Oficina, Coluna AC = Data Factu, Coluna Y = Total Liqui)
+            # Mapeamento robusto com fallback direto para as posições exatas (Col 0 = Oficina, Col 24 / Y = Total Liquido, Col 28 / AC = Data Factu)
             col_oficina_f = df_fact_total.columns[0]
             
             col_data_f = next((c for c in df_fact_total.columns if "data factu" in str(c).lower() or "data" in str(c).lower()), df_fact_total.columns[min(28, len(df_fact_total.columns)-1)])
@@ -541,7 +541,7 @@ else:
             if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
                 df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="mixed", dayfirst=True, errors="coerce")
 
-            # Tratamento robusto dos valores da Coluna Y ("Total Liqui")
+            # Tratamento robusto dos valores numéricos
             val_series = df_fact_total[col_valor_f]
             if val_series.dtype == object:
                 s_clean = val_series.astype(str).str.replace("€", "", regex=False).str.strip()
@@ -550,7 +550,7 @@ else:
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(val_series, errors="coerce").fillna(0.0)
 
-            # 3. Mapeamento e Agrupamento com Fallback Robusto
+            # 3. Mapeamento e Agrupamento
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
@@ -578,15 +578,16 @@ else:
 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
-            # Filtro flexível para a oficina (tenta correspondência exata, depois parcial, e se não encontrar nada usa o total para evitar 0)
             df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean]
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False)]
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total[df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False)]
             if df_oficina_fat.empty:
-                # Fallback final: se o nome não cruzar com nenhum filtro da linha, assume o dataset completo para o mês selecionado
                 df_oficina_fat = df_fact_total
+            
+            # Filtra estritamente pelo mês selecionado
+            df_oficina_fat = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
             
             df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
             df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
@@ -667,13 +668,11 @@ else:
                     x=alt.X('Data:T', title='Data', axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45))
                 )
                 
-                # Barras de Faturação Acumulada (Cor Verde/Teal)
                 barras = base.mark_bar(color='#115e59').encode(
                     y=alt.Y('Facturacao_Acumulada:Q', title='Valor (€)'),
                     tooltip=['Data', 'Facturacao_Diaria', 'Facturacao_Acumulada']
                 )
                 
-                # Linha de Orçamento Acumulado (Cor Laranja)
                 linha_orc = base.mark_line(color='#f97316', strokeWidth=3).encode(
                     y='Orcamento_Acumulado:Q',
                     tooltip=['Data', 'Orcamento_Acumulado']
