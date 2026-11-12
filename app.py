@@ -483,7 +483,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Carregamento de Faturação CSV por Posição Fixa (Coluna 0, Coluna Y=24, Coluna AC=28)
+        # 2. Carregamento de Faturação CSV por Posição Fixa (Coluna A=0, Coluna Y=24, Coluna AC=28, pulando o cabeçalho)
         df_fact_total = pd.DataFrame()
         csv_fontes = [st.session_state.file_fact1_up, st.session_state.file_fact2_up]
         if all(f is None for f in csv_fontes):
@@ -502,22 +502,18 @@ else:
                     for sep_Char in [";", ","]:
                         if hasattr(file_f, "seek"):
                             file_f.seek(0)
-                        for skip in range(8):
-                            if hasattr(file_f, "seek"):
-                                file_f.seek(0)
-                            try:
-                                temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", skiprows=skip, low_memory=False, header=None)
-                                if len(temp_df.columns) > 28:
-                                    t_temp = temp_df
-                                    break
-                            except:
-                                pass
-                        if not t_temp.empty:
-                            break
+                        try:
+                            # Lê o CSV ignorando a linha 0 (cabeçalho) para ler diretamente os dados brutos nas posições exatas
+                            temp_df = pd.read_csv(file_f, sep=sep_Char, encoding="iso-8859-1", skiprows=1, low_memory=False, header=None)
+                            if len(temp_df.columns) > 28:
+                                t_temp = temp_df
+                                break
+                        except:
+                            pass
                     if t_temp.empty:
                         if hasattr(file_f, "seek"):
                             file_f.seek(0)
-                        t_temp = pd.read_csv(file_f, sep=None, engine="python", encoding="iso-8859-1", low_memory=False, header=None)
+                        t_temp = pd.read_csv(file_f, sep=None, engine="python", encoding="iso-8859-1", low_memory=False, skiprows=1, header=None)
                     
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
@@ -527,8 +523,7 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação. Carregue os ficheiros CSV na barra lateral (Admin) ou coloque-os na pasta do projeto.")
         else:
-            # Leitura por posições exatas (Sem depender de nomes de cabeçalhos)
-            # Coluna 0 = Oficina, Coluna 24 (Y) = Valor Total Líquido, Coluna 28 (AC) = Data Fatura
+            # Coluna A (Índice 0) = Oficina, Coluna Y (Índice 24) = Total Líquido, Coluna AC (Índice 28) = Data Fatura
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, 0].astype(str).str.strip()
             
             # Conversão robusta da Data (Coluna 28)
