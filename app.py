@@ -586,7 +586,7 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL - Extração Ultra-Robusta (Varre qualquer coluna numérica ou correspondência de mês)
+            # 4. ORÇAMENTO MENSAL - Extração Precisa da Columna do Mês Selecionado
             orcamento_mensal = 0.0
             if not df_orc.empty:
                 col_orc_ofic = df_orc.columns[0]
@@ -597,35 +597,33 @@ else:
                 
                 if not match_orc.empty:
                     row_orc = match_orc.iloc[0]
-                    # Tenta procurar uma coluna com o nome do mês (ex: "Novembro", "Nov") ou o número do mês
                     nome_mes_pt = meses_pt[mes_selecionado].upper()
                     sigla_m = meses_sigla[mes_selecionado].upper()
                     
                     val_encontrado = None
+                    # Procura estricta pela coluna que corresponde exatamente ao mês selecionado
                     for col in df_orc.columns:
                         col_str = str(col).upper()
-                        if nome_mes_pt in col_str or sigla_m in col_str or str(mes_selecionado) in col_str:
+                        if nome_mes_pt in col_str or sigla_m in col_str:
                             val_c = row_orc[col]
                             try:
                                 v_num = float(str(val_c).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
-                                if v_num > 100:  # Um orçamento mensal razoável
+                                if v_num > 0:
                                     val_encontrado = v_num
                                     break
                             except:
                                 pass
-                                
-                    # Se não encontrou pela coluna do mês, varre todas as colunas numéricas da linha
-                    if val_encontrado is None:
-                        for col in df_orc.columns:
-                            val_c = row_orc[col]
-                            try:
-                                v_num = float(str(val_c).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
-                                if v_num > 500:  # Valor típico de orçamento mensal de oficina
-                                    val_encontrado = v_num
-                                    break
-                            except:
-                                pass
-                                
+                    
+                    # Se não encontrar pelo nome do mês na coluna, procura por uma coluna com índice específico ou valor unitário provável
+                    if val_encontrado is None and len(df_orc.columns) > mes_selecionado:
+                        try:
+                            val_c = row_orc[df_orc.columns[mes_selecionado]]
+                            v_num = float(str(val_c).replace("€", "").replace(" ", "").replace(".", "").replace(",", "."))
+                            if v_num > 0:
+                                val_encontrado = v_num
+                        except:
+                            pass
+
                     orcamento_mensal = val_encontrado if val_encontrado is not None else 0.0
                     
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
@@ -662,7 +660,7 @@ else:
                 st.altair_chart(chart, use_container_width=True)
                 
             with col_kpi:
-                st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.2f} €".replace(",", " ").replace(".", ","))
-                st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.2f} €".replace(",", " ").replace(".", ","), delta=f"{desvio_orcamento:,.2f} €")
+                st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.0f} €".replace(",", " "))
+                st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
+                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
+                st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
