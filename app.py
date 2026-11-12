@@ -12,7 +12,7 @@ meses_pt = {
     9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
 
-st.sidebar.header("Parâmetros e Ficheiros")
+st.sidebar.header("Parâmetros do Mês")
 mes_atual_num = datetime.now().month
 
 mes_selecionado = st.sidebar.selectbox(
@@ -27,35 +27,35 @@ if st.sidebar.button("Atualizar / Limpar Cache"):
     st.cache_data.clear()
     st.rerun()
 
+dias_uteis_iniciais = 22
+decorridos_iniciais = 22 if (mes_selecionado < mes_atual_num) else min(8, 22)
+
+dias_uteis_padrao_mes = st.sidebar.slider(
+    f"Total de Dias Úteis ({meses_pt[mes_selecionado]}):", 
+    min_value=18, max_value=25, value=dias_uteis_iniciais
+)
+
+dias_decorridos = st.sidebar.number_input(
+    "Dias úteis decorridos:", 
+    min_value=1, max_value=dias_uteis_padrao_mes, 
+    value=dias_uteis_padrao_mes if (mes_selecionado < mes_atual_num) else decorridos_iniciais
+)
+
+percentagem_progresso = (dias_decorridos / dias_uteis_padrao_mes) * 100 if dias_uteis_padrao_mes > 0 else 0
+progresso_decimal = min(max(dias_decorridos / dias_uteis_padrao_mes, 0.0), 1.0)
+
+st.sidebar.progress(
+    progresso_decimal,
+    text=f"Progresso: {dias_decorridos} de {dias_uteis_padrao_mes} dias ({percentagem_progresso:.1f}%)"
+)
+
 st.sidebar.markdown("---")
-st.sidebar.subheader("Carregar Ficheiros Excel")
+st.sidebar.header("Carregar Ficheiros Excel")
 file_mecanicos = st.sidebar.file_uploader("Carregar 'tabela mecânicos.xlsx'", type=["xlsx"])
 file_hf = st.sidebar.file_uploader("Carregar 'Comparativo de Horas'", type=["xlsx"])
 file_ausencias = st.sidebar.file_uploader("Carregar 'Listagem de Ausencias'", type=["xlsx"])
 
 if file_mecanicos and file_hf:
-    dias_uteis_iniciais = 22
-    decorridos_iniciais = 22 if (mes_selecionado < mes_atual_num) else min(8, 22)
-
-    dias_uteis_padrao_mes = st.sidebar.slider(
-        f"Total de Dias Úteis ({meses_pt[mes_selecionado]}):", 
-        min_value=18, max_value=25, value=dias_uteis_iniciais
-    )
-    
-    dias_decorridos = st.sidebar.number_input(
-        "Dias úteis decorridos:", 
-        min_value=1, max_value=dias_uteis_padrao_mes, 
-        value=dias_uteis_padrao_mes if (mes_selecionado < mes_atual_num) else decorridos_iniciais
-    )
-
-    percentagem_progresso = (dias_decorridos / dias_uteis_padrao_mes) * 100 if dias_uteis_padrao_mes > 0 else 0
-    progresso_decimal = min(max(dias_decorridos / dias_uteis_padrao_mes, 0.0), 1.0)
-    
-    st.sidebar.progress(
-        progresso_decimal,
-        text=f"Progresso: {dias_decorridos} de {dias_uteis_padrao_mes} dias ({percentagem_progresso:.1f}%)"
-    )
-
     xl = pd.ExcelFile(file_mecanicos)
     df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
     df_hf = pd.read_excel(file_hf)
@@ -149,6 +149,7 @@ if file_mecanicos and file_hf:
     df_sem_prod_final = pd.DataFrame(linhas_sem_produtivo)
     df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True) if not df_sem_prod_final.empty else df_exibicao_tecnicos
 
+    st.sidebar.markdown("---")
     st.sidebar.header("Filtros")
     locais_disponiveis = ["Todas"] + sorted(df_completo["Local"].dropna().astype(str).unique().tolist())
     sel_local = st.sidebar.selectbox("Selecionar Cidade (Local)", locais_disponiveis)
@@ -196,4 +197,4 @@ if file_mecanicos and file_hf:
         use_container_width=True
     )
 else:
-    st.info("👈 Por favor, carrega a **tabela de mecânicos** e o **comparativo de horas** na barra lateral para gerar o relatório.")
+    st.info("👈 Por favor, carregue a **tabela de mecânicos** e o **comparativo de horas** no fundo da barra lateral para gerar o relatório.")
