@@ -5,17 +5,19 @@ import os
 
 st.set_page_config(page_title="Relatório de Produtividade - Oficinas", layout="wide")
 
-# CSS personalizado para colorir o botão de atualizar/limpar cache de cinzento
+# CSS personalizado para escurecer o botão de atualizar/limpar cache
 st.markdown("""
     <style>
     div.stButton > button:first-child {
-        background-color: #f0f2f6;
-        color: #31333F;
-        border: 1px solid #dcdcdc;
+        background-color: #d1d5db;
+        color: #1f2937;
+        border: 1px solid #9ca3af;
+        font-weight: 500;
     }
     div.stButton > button:first-child:hover {
-        background-color: #e2e4e9;
-        border: 1px solid #c0c0c0;
+        background-color: #9ca3af;
+        color: #ffffff;
+        border: 1px solid #6b7280;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -25,9 +27,9 @@ col_titulo, col_logo = st.columns([4, 1])
 with col_titulo:
     st.title("Relatório de Produtividade de Oficinas")
 with col_logo:
-    logo_path = "logo motorpor.jpg" # Certifica-te de que o ficheiro está com este nome exato no repositório
+    logo_path = "logo_motorpor.jpg" # Nome sem espaços (garante que o ficheiro no GitHub tem este nome exato)
     if os.path.exists(logo_path):
-        st.image(logo_path, width=160)
+        st.image(logo_path, width=150)
 
 meses_pt = {
     1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 
@@ -74,7 +76,6 @@ if st.sidebar.button("Atualizar / Limpar Cache"):
     st.cache_data.clear()
     st.rerun()
 
-# Data e hora da última atualização logo abaixo do botão
 ultima_atualizacao = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 st.sidebar.caption(f"🔄 Última atualização: {ultima_atualizacao}")
 
