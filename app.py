@@ -12,7 +12,14 @@ meses_pt = {
     9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
 
-# 0. RESERVAR ESPAÇO PARA O LOGIN NO TOPO DA BARRA LATERAL
+# Inicializar o estado de autenticação
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
+    st.session_state.utilizador = ""
+    st.session_state.oficinas_autorizadas = []
+    st.session_state.acesso_total = False
+
+# 0. RESERVAR ESPAÇO PARA O LOGIN / LOGOUT NO TOPO DA BARRA LATERAL
 container_login = st.sidebar.container()
 
 # 1. SECÇÃO: PARÂMETROS DO MÊS
@@ -66,11 +73,7 @@ file_mecanicos = st.sidebar.file_uploader("Carregar 'tabela mecânicos.xlsx'", t
 file_hf = st.sidebar.file_uploader("Carregar 'Comparativo de Horas'", type=["xlsx"])
 file_ausencias = st.sidebar.file_uploader("Carregar 'Listagem de Ausencias'", type=["xlsx"])
 
-# LÓGICA DE AUTENTICAÇÃO
-utilizador_autenticado = False
-oficinas_autorizadas = []
-acesso_total = False
-
+# LÓGICA DE AUTENTICAÇÃO E LOGOUT
 with container_login:
     st.header("Acesso / Login")
     if file_perfis:
@@ -78,31 +81,45 @@ with container_login:
         df_perfis["Utilizador_clean"] = df_perfis["Utilizador"].astype(str).str.strip().str.lower()
         df_perfis["password_clean"] = df_perfis["password"].astype(str).str.strip()
 
-        user_input = st.text_input("Utilizador:").strip().lower()
-        pass_input = st.text_input("Password:", type="password").strip()
+        if not st.session_state.autenticado:
+            user_input = st.text_input("Utilizador:").strip().lower()
+            pass_input = st.text_input("Password:", type="password").strip()
 
-        if user_input and pass_input:
-            match = df_perfis[(df_perfis["Utilizador_clean"] == user_input) & (df_perfis["password_clean"] == pass_input)]
-            if not match.empty:
-                utilizador_autenticado = True
-                nome_real = match.iloc[0]["Utilizador"]
-                permissoes_str = str(match.iloc[0]["Oficinas permitidas"]).strip()
-                st.success(f"Bem-vindo, {nome_real}!")
-                
-                if permissoes_str.lower() == "todas":
-                    acesso_total = True
+            if st.button("Entrar"):
+                if user_input and pass_input:
+                    match = df_perfis[(df_perfis["Utilizador_clean"] == user_input) & (df_perfis["password_clean"] == pass_input)]
+                    if not match.empty:
+                        st.session_state.autenticado = True
+                        st.session_state.utilizador = match.iloc[0]["Utilizador"]
+                        permissoes_str = str(match.iloc[0]["Oficinas permitidas"]).strip()
+                        
+                        if permissoes_str.lower() == "todas":
+                            st.session_state.acesso_total = True
+                            st.session_state.oficinas_autorizadas = []
+                        else:
+                            st.session_state.acesso_total = False
+                            st.session_state.oficinas_autorizadas = [o.strip().upper() for o in permissoes_str.split(",") if o.strip()]
+                        st.rerun()
+                    else:
+                        st.error("Utilizador ou password incorretos.")
                 else:
-                    oficinas_autorizadas = [o.strip().upper() for o in permissoes_str.split(",") if o.strip()]
-            else:
-                st.error("Utilizador ou password incorretos.")
+                    st.warning("Preencha o utilizador e a password.")
+        else:
+            st.success(f"Sessão iniciada como: **{st.session_state.utilizador}**")
+            if st.button("Logout / Mudar Utilizador"):
+                st.session_state.autenticado = False
+                st.session_state.utilizador = ""
+                st.session_state.oficinas_autorizadas = []
+                st.session_state.acesso_total = False
+                st.rerun()
     else:
-        st.caption("Carregue o ficheiro de perfis no fundo da barra lateral.")
+        st.caption("Carrege o ficheiro de perfis no fundo da barra lateral.")
 
-# PROCESSAMENTO DOS DADOS (APENAS SE AUTENTICADO E FICHEIROS CARREGADOS)
+# PROCESSAMENTO DOS DADOS
 if not file_perfis:
     st.info("👈 Por favor, carregue o ficheiro **perfis_utilizadores.xlsx** no fundo da barra lateral.")
-elif not utilizador_autenticado:
-    st.warning("🔒 Por favor, introduza o seu **Utilizador** e **Password** no topo da barra lateral para aceder aos relatórios.")
+elif not st.session_state.autenticado:
+    st.warning("🔒 Por favor, faça login no topo da barra lateral para aceder aos relatórios.")
 elif file_mecanicos and file_hf:
     xl = pd.ExcelFile(file_mecanicos)
     df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
@@ -203,9 +220,9 @@ elif file_mecanicos and file_hf:
     df_sem_prod_final = pd.DataFrame(linhas_sem_produtivo)
     df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True) if not df_sem_prod_final.empty else df_exibicao_tecnicos
 
-    # APLICAR RESTRIÇÃO DE PERFIL AOS DADOS ANTES DOS FILTROS
-    if not acesso_total:
-        df_completo = df_completo[df_completo["Oficina"].str.upper().isin(oficinas_autorizadas)]
+    # APLICAR RESTRIÇÃO DE PERFIL
+    if not st.session_state.acesso_total:
+        df_completo = df_completo[df_completo["Oficina"].str.upper().isin(st.session_state.oficinas_autorizadas)]
 
     with container_filtros:
         st.header("Filtros")
