@@ -65,23 +65,42 @@ st.sidebar.progress(
 st.sidebar.markdown("---")
 container_filtros = st.sidebar.container()
 
-# 3. SECÇÃO: CARREGAR FICHEIROS EXCEL (NO FUNDO)
-st.sidebar.markdown("---")
-st.sidebar.header("Carregar Ficheiros Excel")
-file_perfis = st.sidebar.file_uploader("Carregar 'perfis_utilizadores.xlsx'", type=["xlsx"])
-file_mecanicos = st.sidebar.file_uploader("Carregar 'tabela mecânicos.xlsx'", type=["xlsx"])
-file_hf = st.sidebar.file_uploader("Carregar 'Comparativo de Horas'", type=["xlsx"])
-file_ausencias = st.sidebar.file_uploader("Carregar 'Listagem de Ausencias'", type=["xlsx"])
+# 3. SECÇÃO: CARREGAR FICHEIROS EXCEL (APENas PARA VAZUL E MCHEGADINHO)
+utilizadores_com_permissao_upload = ["vazul", "mchegadinho"]
+utilizador_atual = st.session_state.utilizador.strip().lower()
+tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.lower() for u in utilizadores_com_permissao_upload])
+
+file_perfis = None
+file_mecanicos = None
+file_hf = None
+file_ausencias = None
+
+if tem_permissao_upload:
+    st.sidebar.markdown("---")
+    st.sidebar.header("Carregar Ficheiros Excel")
+    file_perfis = st.sidebar.file_uploader("Carregar 'perfis_utilizadores.xlsx'", type=["xlsx"])
+    file_mecanicos = st.sidebar.file_uploader("Carregar 'tabela mecânicos.xlsx'", type=["xlsx"])
+    file_hf = st.sidebar.file_uploader("Carregar 'Comparativo de Horas'", type=["xlsx"])
+    file_ausencias = st.sidebar.file_uploader("Carregar 'Listagem de Ausencias'", type=["xlsx"])
 
 # LÓGICA DE AUTENTICAÇÃO E LOGOUT
 with container_login:
     st.header("Acesso / Login")
-    if file_perfis:
-        df_perfis = pd.read_excel(file_perfis)
-        df_perfis["Utilizador_clean"] = df_perfis["Utilizador"].astype(str).str.strip().str.lower()
-        df_perfis["password_clean"] = df_perfis["password"].astype(str).str.strip()
+    # Para validar o login, precisamos de ler temporariamente o ficheiro de perfis se o utilizador for admin, 
+    # mas como os admins precisam de carregar os ficheiros, vamos permitir carregar o perfis_utilizadores mesmo antes do login completo, 
+    # ou assumir que o perfis_utilizadores está acessível. Vamos manter o uploader de perfis visível para todos no login se necessário, 
+    # ou restringir os outros. 
+    # Nota: para fazer login, precisamos do df_perfis. Vamos garantir que o uploader de perfis aparece no login:
+    
+if not st.session_state.autenticado:
+    with container_login:
+        file_perfis_temp = st.file_uploader("Carregar 'perfis_utilizadores.xlsx' (Login)", type=["xlsx"], key="login_perfis")
+        if file_perfis_temp:
+            file_perfis = file_perfis_temp
+            df_perfis = pd.read_excel(file_perfis)
+            df_perfis["Utilizador_clean"] = df_perfis["Utilizador"].astype(str).str.strip().str.lower()
+            df_perfis["password_clean"] = df_perfis["password"].astype(str).str.strip()
 
-        if not st.session_state.autenticado:
             user_input = st.text_input("Utilizador:").strip().lower()
             pass_input = st.text_input("Password:", type="password").strip()
 
@@ -105,21 +124,25 @@ with container_login:
                 else:
                     st.warning("Preencha o utilizador e a password.")
         else:
-            st.success(f"Sessão iniciada como: **{st.session_state.utilizador}**")
-            if st.button("Logout / Mudar Utilizador"):
-                st.session_state.autenticado = False
-                st.session_state.utilizador = ""
-                st.session_state.oficinas_autorizadas = []
-                st.session_state.acesso_total = False
-                st.rerun()
-    else:
-        st.caption("Carrege o ficheiro de perfis no fundo da barra lateral.")
+            st.caption("Carrege o ficheiro 'perfis_utilizadores.xlsx' para iniciar sessão.")
+else:
+    with container_login:
+        st.success(f"Sessão iniciada como: **{st.session_state.utilizador}**")
+        if st.button("Logout / Mudar Utilizador"):
+            st.session_state.autenticado = False
+            st.session_state.utilizador = ""
+            st.session_state.oficinas_autorizadas = []
+            st.session_state.acesso_total = False
+            st.rerun()
 
-# PROCESSAMENTO DOS DADOS
-if not file_perfis:
-    st.info("👈 Por favor, carregue o ficheiro **perfis_utilizadores.xlsx** no fundo da barra lateral.")
-elif not st.session_state.autenticado:
+# PROCESSAMENTO DOS DADOS (Se for admin, usa os ficheiros carregados; se for outro utilizador, assume que os ficheiros base estão disponíveis ou tratados)
+# Nota: Para os utilizadores normais gerarem o relatório, eles precisam que os ficheiros de mecânicos, horas e ausências estejam disponíveis. 
+# Se os admins (Vazul / mchegadinho) carregarem os ficheiros, podes guardá-los ou mantê-los na sessão, ou exigir que os admins façam o upload.
+
+if not st.session_state.autenticado:
     st.warning("🔒 Por favor, faça login no topo da barra lateral para aceder aos relatórios.")
+elif not tem_permissao_upload and not file_mecanicos:
+    st.info("ℹ️ A aguardar que o administrador carregue os ficheiros de dados da oficina.")
 elif file_mecanicos and file_hf:
     xl = pd.ExcelFile(file_mecanicos)
     df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
@@ -150,7 +173,6 @@ elif file_mecanicos and file_hf:
     oficinas_oficiais = df_mecanicos["Oficina"].unique().tolist()
     dict_oficina_local = dict(zip(df_mecanicos["Oficina"].str.upper(), df_mecanicos["Local"]))
 
-    # Detetar oficina oficial de Portimão
     oficina_portimao_oficial = "MECÂNICA PORTIMÃO"
     for o in oficinas_oficiais:
         if "PORTIMÃO" in o.upper() or "PORTIMAO" in o.upper():
@@ -173,21 +195,16 @@ elif file_mecanicos and file_hf:
             return oficina_portimao_oficial
         if "FARO" in nome_upper:
             for o in oficinas_oficiais:
-                if "FARO" in o.upper(): 
-                    return o
+                if "FARO" in o.upper(): return o
         if "ÉVORA" in nome_upper or "EVORA" in nome_upper:
             for o in oficinas_oficiais:
-                if "ÉVORA" in o.upper() or "EVORA" in o.upper(): 
-                    return o
+                if "ÉVORA" in o.upper() or "EVORA" in o.upper(): return o
         if "SETÚBAL" in nome_upper or "SETUBAL" in nome_upper:
             for o in oficinas_oficiais:
-                if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper(): 
-                    return o
+                if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper(): return o
         if "SINES" in nome_upper:
             for o in oficinas_oficiais:
-                if "SINES" in o.upper(): 
-                    return o
-                    
+                if "SINES" in o.upper(): return o
         return nome_str
 
     col_operario_hf = next((c for c in ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico"] if c in df_hf.columns), df_hf.select_dtypes(include=['object']).columns[0])
@@ -201,7 +218,6 @@ elif file_mecanicos and file_hf:
     df_hf_grouped = df_hf_known.groupby("Operario_clean", as_index=False)[col_fact].sum()
     df_hf_grouped.rename(columns={col_fact: "Horas facturadas", "Operario_clean": "Técnico_clean"}, inplace=True)
 
-    # UNIR MECÂNICOS COM HORAS FACTURADAS E AUSÊNCIAS CALCULADAS
     df_merged = pd.merge(df_mecanicos, df_hf_grouped, on="Técnico_clean", how="left")
     if not df_ausencias_grouped.empty:
         df_merged = pd.merge(df_merged, df_ausencias_grouped, on="Técnico_clean", how="left")
@@ -211,8 +227,6 @@ elif file_mecanicos and file_hf:
 
     df_merged["Horas facturadas"] = df_merged["Horas facturadas"].fillna(0.0)
     df_merged["Horas reais dia"] = df_merged["Horas reais dia"].fillna(7.5)
-    
-    # CÁLCULO EXATO: Horas disponíveis = (Dias decorridos * Horas reais dia) - Ausências
     df_merged["Horas disponiveis"] = (dias_decorridos * df_merged["Horas reais dia"]) - df_merged["Ausencias"]
 
     colunas_finais = [
@@ -242,18 +256,12 @@ elif file_mecanicos and file_hf:
                 local_val = dict_oficina_local.get(oficina_val.upper(), "Outro")
                 if local_val == "Outro":
                     of_upper = oficina_val.upper()
-                    if "BEJA" in of_upper: 
-                        local_val = "Beja"
-                    elif "PORTIMÃO" in of_upper or "PORTIMAO" in of_upper: 
-                        local_val = "Portimão"
-                    elif "ÉVORA" in of_upper or "EVORA" in of_upper: 
-                        local_val = "Évora"
-                    elif "FARO" in of_upper: 
-                        local_val = "Faro"
-                    elif "SETÚBAL" in of_upper or "SETUBAL" in of_upper: 
-                        local_val = "Setúbal"
-                    elif "SINES" in of_upper: 
-                        local_val = "Sines"
+                    if "BEJA" in of_upper: local_val = "Beja"
+                    elif "PORTIMÃO" in of_upper or "PORTIMAO" in of_upper: local_val = "Portimão"
+                    elif "ÉVORA" in of_upper or "EVORA" in of_upper: local_val = "Évora"
+                    elif "FARO" in of_upper: local_val = "Faro"
+                    elif "SETÚBAL" in of_upper or "SETUBAL" in of_upper: local_val = "Setúbal"
+                    elif "SINES" in of_upper: local_val = "Sines"
 
                 linhas_sem_produtivo.append({
                     "Técnico": "Sem produtivo",
@@ -271,7 +279,6 @@ elif file_mecanicos and file_hf:
     df_sem_prod_final = pd.DataFrame(linhas_sem_produtivo)
     df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True) if not df_sem_prod_final.empty else df_exibicao_tecnicos
 
-    # APLICAR RESTRIÇÃO DE PERFIL DE FORMA FLEXÍVEL
     if not st.session_state.acesso_total:
         def oficina_permitida(oficina):
             oficina_up = str(oficina).upper()
@@ -333,8 +340,8 @@ elif file_mecanicos and file_hf:
         }, na_rep="-"),
         use_container_width=True
     )
-else:
+elif st.session_state.autenticado and tem_permissao_upload:
     with container_filtros:
         st.header("Filtros")
-        st.caption("Carregue os ficheiros abaixo para ativar os filtros.")
-    st.info("👈 Por favor, carregue a **tabela de mecânicos** e o **comparativo de horas** no fundo da barra lateral para gerar o relatório.")
+        st.caption("Carregue os ficheiros em cima para ativar os filtros.")
+    st.info("👈 Por favor, carregue a **tabela de mecânicos** e o **comparativo de horas** na barra lateral para gerar o relatório.")
