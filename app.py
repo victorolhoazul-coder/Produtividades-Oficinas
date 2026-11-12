@@ -139,13 +139,68 @@ elif file_mecanicos and file_hf:
             return "Geral"
         nome_str = str(nome_oficina).strip()
         nome_upper = nome_str.upper()
+        
+        # Verificar correspondência exata com oficinas oficiais
         for oficina_oficial in oficinas_oficiais:
             if oficina_oficial.upper() == nome_upper:
                 return oficina_oficial
-        if "RENAULT BEJA" in nome_upper or "PEUGEOT BEJA" in nome_upper or "MECÂNICA BEJA" in nome_upper:
+                
+        # Normalizações automáticas por cidade/palavra-chave
+        if "BEJA" in nome_upper:
             return "MECÂNICA BEJA"
-        if "COLISÃO BEJA" in nome_upper or "COLISAO BEJA" in nome_upper:
-            return "COLISÃO BEJA"
+        if "PORTIMÃO" in nome_upper or "PORTIMAO" in nome_upper:
+            return "MECÂNICA PORTIMÃO" if "MECÂNICA PORTIMÃO" in [o.upper() for o in oficinas_oficiais] else oficina_str
+        if "FARO" in nome_upper:
+            for o in oficinas_oficiais:
+                if "FARO" in o.upper():
+                    return o
+        if "ÉVORA" in nome_upper or "EVORA" in nome_upper:
+            for o in oficinas_oficiais:
+                if "ÉVORA" in o.upper() or "EVORA" in o.upper():
+                    return o
+        if "SETÚBAL" in nome_upper or "SETUBAL" in nome_upper:
+            for o in oficinas_oficiais:
+                if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper():
+                    return o
+        if "SINES" in nome_upper:
+            for o in oficinas_oficiais:
+                if "SINES" in o.upper():
+                    return o
+                    
+        return nome_str
+
+    # Ajustar para detetar corretamente a oficina oficial de Portimão na normalização
+    for o in oficinas_oficiais:
+        if "PORTIMÃO" in o.upper() or "PORTIMAO" in o.upper():
+            oficina_portimao_oficial = o
+            break
+    else:
+        oficina_portimao_oficial = "MECÂNICA PORTIMÃO"
+
+    def normalizar_oficina(nome_oficina):
+        if pd.isna(nome_oficina):
+            return "Geral"
+        nome_str = str(nome_oficina).strip()
+        nome_upper = nome_str.upper()
+        for oficina_oficial in oficinas_oficiais:
+            if oficina_oficial.upper() == nome_upper:
+                return oficina_oficial
+        if "BEJA" in nome_upper:
+            return "MECÂNICA BEJA"
+        if "PORTIMÃO" in nome_upper or "PORTIMAO" in nome_upper:
+            return oficina_portimao_oficial
+        if "FARO" in nome_upper:
+            for o in oficinas_oficiais:
+                if "FARO" in o.upper(): return o
+        if "ÉVORA" in nome_upper or "EVORA" in nome_upper:
+            for o in oficinas_oficiais:
+                if "ÉVORA" in o.upper() or "EVORA" in o.upper(): return o
+        if "SETÚBAL" in nome_upper or "SETUBAL" in nome_upper:
+            for o in oficinas_oficiais:
+                if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper(): return o
+        if "SINES" in nome_upper:
+            for o in oficinas_oficiais:
+                if "SINES" in o.upper(): return o
         return nome_str
 
     col_operario_hf = next((c for c in ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico"] if c in df_hf.columns), df_hf.select_dtypes(include=['object']).columns[0])
@@ -192,18 +247,12 @@ elif file_mecanicos and file_hf:
                 local_val = dict_oficina_local.get(oficina_val.upper(), "Outro")
                 if local_val == "Outro":
                     of_upper = oficina_val.upper()
-                    if "BEJA" in of_upper:
-                        local_val = "Beja"
-                    elif "ÉVORA" in of_upper or "EVORA" in of_upper:
-                        local_val = "Évora"
-                    elif "FARO" in of_upper:
-                        local_val = "Faro"
-                    elif "SETÚBAL" in of_upper or "SETUBAL" in of_upper:
-                        local_val = "Setúbal"
-                    elif "SINES" in of_upper:
-                        local_val = "Sines"
-                    elif "PORTIMÃO" in of_upper or "PORTIMAO" in of_upper:
-                        local_val = "Portimão"
+                    if "BEJA" in of_upper: local_val = "Beja"
+                    elif "PORTIMÃO" in of_upper or "PORTIMAO" in of_upper: local_val = "Portimão"
+                    elif "ÉVORA" in of_upper or "EVORA" in of_upper: local_val = "Évora"
+                    elif "FARO" in of_upper: local_val = "Faro"
+                    elif "SETÚBAL" in of_upper or "SETUBAL" in of_upper: local_val = "Setúbal"
+                    elif "SINES" in of_upper: local_val = "Sines"
 
                 linhas_sem_produtivo.append({
                     "Técnico": "Sem produtivo",
