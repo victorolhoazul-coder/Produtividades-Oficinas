@@ -487,12 +487,10 @@ else:
         
         df_fact_total = pd.DataFrame()
         
-        # Leitura robusta dos CSVs de Faturação
         for file_f in [st.session_state.file_fact1_up, st.session_state.file_fact2_up]:
             if file_f is not None:
                 try:
                     file_f.seek(0)
-                    # Testa diferentes leituras para apanhar o cabeçalho correto dos relatórios
                     for skip in [5, 4, 3, 2, 6, 0]:
                         file_f.seek(0)
                         t_temp = pd.read_csv(file_f, sep=";", encoding="iso-8859-1", skiprows=skip)
@@ -524,7 +522,6 @@ else:
         else:
             df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
             
-            # Identificação inteligente e segura das colunas chave no CSV
             col_oficina_f = df_fact_total.columns[0]
             col_data_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["data", "factura", "emissão", "dia"])), df_fact_total.columns[min(28, len(df_fact_total.columns)-1)])
             col_valor_f = next((c for c in df_fact_total.columns if any(k in str(c).lower() for k in ["liquido", "líquido", "valor", "total", "s/iva", "euros"])), df_fact_total.columns[min(24, len(df_fact_total.columns)-1)])
@@ -535,15 +532,16 @@ else:
             if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
                 df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_f], format="mixed", dayfirst=True, errors="coerce")
 
-            # Limpeza robusta e conversão numérica de valores
+            # Conversão fiável dos valores numéricos dos CSVs
             val_series = df_fact_total[col_valor_f]
             if val_series.dtype == object:
-                df_fact_total["Valor_Num"] = val_series.astype(str).str.replace("€", "", regex=False).str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-                df_fact_total["Valor_Num"] = pd.to_numeric(df_fact_total["Valor_Num"], errors="coerce").fillna(0.0)
+                s_clean = val_series.astype(str).str.replace("€", "", regex=False).str.strip()
+                # Se contiver ponto como milhar e vírgula como decimal
+                s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                df_fact_total["Valor_Num"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(val_series, errors="coerce").fillna(0.0)
 
-            # Aplicação do Agrupamento de Oficinas
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
@@ -581,7 +579,7 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # Orçamento Mensal Flexível e Robusto
+            # ORÇAMENTO MENSAL - Leitura robusta e direta
             orcamento_mensal = 0.0
             if not df_orc.empty:
                 col_orc_ofic = df_orc.columns[0]
@@ -590,12 +588,14 @@ else:
                 
                 df_orc["Data_Parsed"] = pd.to_datetime(df_orc[col_orc_data], format="mixed", errors="coerce")
                 
+                # Procura exata por oficina, ano e mês
                 match_orc = df_orc[
                     (df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()) & 
                     (df_orc["Data_Parsed"].dt.year == ano_corrente) & 
                     (df_orc["Data_Parsed"].dt.month == mes_selecionado)
                 ]
                 
+                # Se não encontrar por data exata, procura por correspondência exata do nome da oficina
                 if match_orc.empty:
                     match_orc = df_orc[df_orc[col_orc_ofic].astype(str).str.strip().str.upper() == oficina_selecionada_fat.upper().strip()]
                 
