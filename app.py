@@ -154,7 +154,7 @@ else:
     df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
     df_hf = pd.read_excel(path_hf)
     
-    # PROCESSAMENTO DE AUSÊNCIAS (COM CORREÇÃO ROBUSTA)
+    # PROCESSAMENTO DE AUSÊNCIAS
     df_ausencias = pd.DataFrame()
     if file_ausencias_up is not None:
         df_ausencias = pd.read_excel(file_ausencias_up)
@@ -207,4 +207,84 @@ else:
         if "FARO" in nome_upper:
             for o in oficinas_oficiais:
                 if "FARO" in o.upper(): return o
-        if "ÉV
+        if "ÉVORA" in nome_upper or "EVORA" in nome_upper:
+            for o in oficinas_oficiais:
+                if "ÉVORA" in o.upper() or "EVORA" in o.upper(): return o
+        if "SETÚBAL" in nome_upper or "SETUBAL" in nome_upper:
+            for o in oficinas_oficiais:
+                if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper(): return o
+        if "SINES" in nome_upper:
+            for o in oficinas_oficiais:
+                if "SINES" in o.upper(): return o
+        return nome_str
+
+    col_operario_hf = next((c for c in ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico"] if c in df_hf.columns), df_hf.select_dtypes(include=['object']).columns[0])
+    col_fact = next((c for c in ["Tempos facturados", "Tempos facturados ", "Horas facturadas", "Facturado", "Valor"] if c in df_hf.columns), df_hf.select_dtypes(include=['number']).columns[-1])
+    col_oficina_hf = next((c for c in ["Oficina", "Escritório", "Escritorio", "Local"] if c in df_hf.columns), "Oficina")
+
+    df_hf["Operario_clean"] = df_hf[col_operario_hf].astype(str).str.strip().str.upper()
+    df_hf["Oficina_Normalizada"] = df_hf[col_oficina_hf].apply(normalizar_oficina)
+
+    df_hf_known = df_hf[df_hf["Operario_clean"].notna() & (df_hf["Operario_clean"] != "") & (df_hf["Operario_clean"] != "NAN")]
+    df_hf_grouped = df_hf_known.groupby("Operario_clean", as_index=False)[col_fact].sum()
+    df_hf_grouped.rename(columns={col_fact: "Horas facturadas", "Operario_clean": "Técnico_clean"}, inplace=True)
+
+    df_merged = pd.merge(df_mecanicos, df_hf_grouped, on="Técnico_clean", how="left")
+    if not df_ausencias_grouped.empty:
+        df_merged = pd.merge(df_merged, df_ausencias_grouped, on="Técnico_clean", how="left")
+        df_merged["Ausencias"] = df_merged["Ausencias_calc"].fillna(0.0)
+    else:
+        df_merged["Ausencias"] = 0.0
+
+    df_merged["Horas facturadas"] = df_merged["Horas facturadas"].fillna(0.0)
+    df_merged["Horas reais dia"] = df_merged["Horas reais dia"].fillna(7.5)
+    df_merged["Horas disponiveis"] = (dias_decorridos * df_merged["Horas reais dia"]) - df_merged["Ausencias"]
+
+    colunas_finais = [
+        "Técnico", "Local", "Oficina", "Função", 
+        "Horas potencial dia", "Horas reais dia", "Ausencias",
+        "Horas disponiveis", "Horas facturadas", "Produtividade %"
+    ]
+    
+    df_merged["Produtividade %"] = 0.0
+    mask_disp = df_merged["Horas disponiveis"] > 0
+    df_merged.loc[mask_disp, "Produtividade %"] = (
+        df_merged.loc[mask_disp, "Horas facturadas"] / df_merged.loc[mask_disp, "Horas disponiveis"]
+    ) * 100
+
+    df_exibicao_tecnicos = df_merged[[c for c in colunas_finais if c in df_merged.columns]].copy()
+
+    df_hf_sem_op = df_hf[df_hf["Operario_clean"].isna() | (df_hf["Operario_clean"] == "") | (df_hf["Operario_clean"] == "NAN")]
+    
+    linhas_sem_produtivo = []
+    if not df_hf_sem_op.empty:
+        df_sem_op_grouped = df_hf_sem_op.groupby("Oficina_Normalizada", as_index=False)[col_fact].sum()
+        for _, row in df_sem_op_grouped.iterrows():
+            oficina_val = row["Oficina_Normalizada"]
+            horas_fact_val = row[col_fact]
+            
+            if horas_fact_val > 0:
+                local_val = dict_oficina_local.get(oficina_val.upper(), "Outro")
+                if local_val == "Outro":
+                    of_upper = oficina_val.upper()
+                    if "BEJA" in of_upper: local_val = "Beja"
+                    elif "PORTIMÃO" in of_upper or "PORTIMAO" in of_upper: local_val = "Portimão"
+                    elif "ÉVORA" in of_upper or "EVORA" in of_upper: local_val = "Évora"
+                    elif "FARO" in of_upper: local_val = "Faro"
+                    elif "SETÚBAL" in of_upper or "SETUBAL" in of_upper: local_val = "Setúbal"
+                    elif "SINES" in of_upper: local_val = "Sines"
+
+                linhas_sem_produtivo.append({
+                    "Técnico": "Sem produtivo",
+                    "Local": local_val,
+                    "Oficina": oficina_val,
+                    "Função": "Sem Produtivo",
+                    "Horas potencial dia": 0.0,
+                    "Horas reais dia": 0.0,
+                    "Ausencias": 0.0,
+                    "Horas disponiveis": 0.0,
+                    "Horas facturadas": horas_fact_val,
+                    "Produtividade %": 0.0
+                })
+
+    df_sem_
