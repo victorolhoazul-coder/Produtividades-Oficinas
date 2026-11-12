@@ -13,14 +13,21 @@ meses_pt = {
     9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
 }
 
-# Inicializar o estado de autenticação
+# Inicializar o estado de autenticação e dados na sessão
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
     st.session_state.utilizador = ""
     st.session_state.oficinas_autorizadas = []
     st.session_state.acesso_total = False
 
-# CARREGAR PERFIS AUTOMATICAMENTE DO REPOSITÓRIO (se existir)
+if "file_mecanicos_cache" not in st.session_state:
+    st.session_state.file_mecanicos_cache = None
+if "file_hf_cache" not in st.session_state:
+    st.session_state.file_hf_cache = None
+if "file_ausencias_cache" not in st.session_state:
+    st.session_state.file_ausencias_cache = None
+
+# CARREGAR PERFIS AUTOMATICAMENTE DO REPOSITÓRIO
 df_perfis = pd.DataFrame()
 if os.path.exists("perfis_utilizadores.xlsx"):
     try:
@@ -81,16 +88,21 @@ utilizadores_com_permissao_upload = ["vazul", "mchegadinho"]
 utilizador_atual = st.session_state.utilizador.strip().lower()
 tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.lower() for u in utilizadores_com_permissao_upload])
 
-file_mecanicos = None
-file_hf = None
-file_ausencias = None
-
 if tem_permissao_upload:
     st.sidebar.markdown("---")
-    st.sidebar.header("Carregar Ficheiros Excel")
-    file_mecanicos = st.sidebar.file_uploader("Carregar 'tabela mecânicos.xlsx'", type=["xlsx"])
-    file_hf = st.sidebar.file_uploader("Carregar 'Comparativo de Horas'", type=["xlsx"])
-    file_ausencias = st.sidebar.file_uploader("Carregar 'Listagem de Ausencias'", type=["xlsx"])
+    st.sidebar.header("Carregar Ficheiros Excel (Admin)")
+    
+    f_mec = st.sidebar.file_uploader("Carregar 'tabela mecânicos.xlsx'", type=["xlsx"], key="up_mec")
+    if f_mec:
+        st.session_state.file_mecanicos_cache = f_mec
+        
+    f_hf = st.sidebar.file_uploader("Carregar 'Comparativo de Horas'", type=["xlsx"], key="up_hf")
+    if f_hf:
+        st.session_state.file_hf_cache = f_hf
+        
+    f_aus = st.sidebar.file_uploader("Carregar 'Listagem de Ausencias'", type=["xlsx"], key="up_aus")
+    if f_aus:
+        st.session_state.file_ausencias_cache = f_aus
 
 # LÓGICA DE AUTENTICAÇÃO E LOGOUT
 with container_login:
@@ -130,19 +142,24 @@ with container_login:
             st.session_state.acesso_total = False
             st.rerun()
 
-# PROCESSAMENTO DOS DADOS
+# PROCESSAMENTO DOS DADOS USANDO O CACHE GLOBAL DA SESSÃO
+file_mecanicos = st.session_state.file_mecanicos_cache
+file_hf = st.session_state.file_hf_cache
+file_ausencias = st.session_state.file_ausencias_cache
+
 if not st.session_state.autenticado:
     st.warning("🔒 Por favor, faça login no topo da barra lateral para aceder aos relatórios.")
-elif not tem_permissao_upload and not file_mecanicos:
-    # Se já existirem os ficheiros na pasta ou se forem carregados pelo admin, processa. 
-    # Caso contrário, avisa que o admin tem de carregar.
-    st.info("ℹ️ A aguardar que o administrador carregue os ficheiros de dados da oficina na barra lateral.")
-elif file_mecanicos and file_hf:
+elif not file_mecanicos or not file_hf:
+    with container_filtros:
+        st.header("Filtros")
+        st.caption("Aguardando carregamento de ficheiros.")
+    st.info("ℹ️ Os ficheiros de dados ainda não foram carregados pelo administrador (Vazul ou mchegadinho).")
+else:
     xl = pd.ExcelFile(file_mecanicos)
     df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
     df_hf = pd.read_excel(file_hf)
     
-    # PROCESSAMENTO DE AUSÊNCIAS
+    # PROCESSAMENTO DE AUSÊNCIAS (TUDO O QUE NÃO É "Presença" NA COLUNA B)
     df_ausencias = pd.read_excel(file_ausencias) if file_ausencias else pd.DataFrame()
     if not df_ausencias.empty:
         col_desc_aus = df_ausencias.columns[1] if len(df_ausencias.columns) > 1 else None
@@ -334,8 +351,3 @@ elif file_mecanicos and file_hf:
         }, na_rep="-"),
         use_container_width=True
     )
-elif st.session_state.autenticado and tem_permissao_upload:
-    with container_filtros:
-        st.header("Filtros")
-        st.caption("Carregue os ficheiros em cima para ativar os filtros.")
-    st.info("👈 Por favor, carregue os ficheiros de dados na barra lateral para gerar o relatório.")
