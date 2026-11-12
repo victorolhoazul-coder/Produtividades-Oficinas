@@ -74,7 +74,7 @@ mes_selecionado = st.sidebar.selectbox(
     "Mês:", 
     options=list(meses_pt.keys()), 
     format_func=lambda x: meses_pt[x].capitalize(), 
-    index=list(meses_pt.keys()).index(mes_atual_num) if (mes_atual_num in mes_pt and ano_corrente == 2026) else 10
+    index=list(meses_pt.keys()).index(mes_atual_num) if (mes_atual_num in meses_pt and ano_corrente == 2026) else 10
 )
 
 sigla_mes = meses_sigla.get(mes_selecionado, "NOV")
