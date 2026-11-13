@@ -476,12 +476,11 @@ else:
                 else:
                     file_bytes = file_f
 
-                for h_val in [5, 6, 4, 0]:
+                for sep_val in [';', ',', '\t']:
                     try:
                         file_bytes.seek(0)
-                        temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=h_val, on_bad_lines='skip')
-                        if not temp_df.empty and len(temp_df.columns) > 3:
-                            temp_df = temp_df.dropna(subset=[temp_df.columns[0]])
+                        temp_df = pd.read_csv(file_bytes, sep=sep_val, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
+                        if not temp_df.empty and len(temp_df.columns) > 5:
                             df_fact_total = pd.concat([df_fact_total, temp_df], ignore_index=True)
                             break
                     except Exception:
@@ -492,31 +491,40 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação válidos ou os ficheiros estão vazios.")
         else:
-            df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
+            df_fact_total["Oficina_CSV"] = df_fact_total[0].astype(str).str.strip()
             
-            col_ofic = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["OFICINA", "LOCAL", "ESCR", "ESTABELECIMENTO"])), df_fact_total.columns[0])
-            col_val = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["TOTAL", "LIQ", "VALOR", "IMPORT", "BRUTO"])), df_fact_total.columns[-1])
-            col_data = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["DATA", "EMISS", "DIA", "PERIODO"])), df_fact_total.columns[-2])
-
-            df_fact_total["Oficina_CSV"] = df_fact_total[col_ofic].astype(str).str.strip()
-            
-            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan", "SUBTOTAL", "OFICINA", "------------------------------------------------------------------------------------------------------------------------"]
+            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan", "SUBTOTAL", "OFICINA"]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.upper().isin(invalidos)]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.startswith("*")]
-            df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.startswith("Ano")]
+            df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.contains("Ano :", na=False)]
 
-            col_data_raw = df_fact_total[col_data]
-            df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
-            if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
-                df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, format="mixed", dayfirst=True, errors="coerce")
+            col_data_idx = None
+            col_val_idx = None
+            
+            for col in df_fact_total.columns:
+                if col == 0: continue
+                parsed = pd.to_datetime(df_fact_total[col], dayfirst=True, errors='coerce')
+                if parsed.notna().mean() > 0.05:
+                    col_data_idx = col
+                    break
+                    
+            for col in reversed(df_fact_total.columns):
+                if col != 0 and col != col_data_idx:
+                    s_sample = df_fact_total[col].astype(str).str.replace('€', '').str.strip()
+                    num_check = pd.to_numeric(s_sample.str.replace('.', '', regex=False).str.replace(',', '.', regex=False), errors='coerce')
+                    if num_check.notna().mean() > 0.05:
+                        col_val_idx = col
+                        break
 
-            col_valor_raw = df_fact_total[col_val]
-            if col_valor_raw.dtype == object:
-                s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
+            if col_data_idx is not None and col_val_idx is not None:
+                df_fact_total["Data_Parsed"] = pd.to_datetime(df_fact_total[col_data_idx], dayfirst=True, errors="coerce")
+                
+                s_clean = df_fact_total[col_val_idx].astype(str).str.replace("€", "", regex=False).str.strip()
                 s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
                 df_fact_total["Valor_Num"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
             else:
-                df_fact_total["Valor_Num"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
+                df_fact_total["Data_Parsed"] = pd.NaT
+                df_fact_total["Valor_Num"] = 0.0
 
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
@@ -653,7 +661,7 @@ else:
             with col_kpi:
                 st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.0f} €".replace(",", " "))
                 st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
-                st.metric(label="FATURAÇÃOÀ DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
+                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
                 st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
@@ -681,12 +689,11 @@ else:
                 else:
                     file_bytes = file_f
 
-                for h_val in [5, 6, 4, 0]:
+                for sep_val in [';', ',', '\t']:
                     try:
                         file_bytes.seek(0)
-                        temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=h_val, on_bad_lines='skip')
-                        if not temp_df.empty and len(temp_df.columns) > 3:
-                            temp_df = temp_df.dropna(subset=[temp_df.columns[0]])
+                        temp_df = pd.read_csv(file_bytes, sep=sep_val, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
+                        if not temp_df.empty and len(temp_df.columns) > 5:
                             df_teste = pd.concat([df_teste, temp_df], ignore_index=True)
                             break
                     except Exception:
@@ -697,31 +704,43 @@ else:
         if df_teste.empty:
             st.warning("⚠️ Nenhum ficheiro CSV de faturação detetado para teste.")
         else:
-            df_teste.columns = [str(c).strip() for c in df_teste.columns]
-            
             st.write(f"**Total de linhas brutas lidas:** {len(df_teste)}")
             
-            # Mostra as colunas detetadas para podermos inspecionar
-            st.write("**Colunas disponíveis no CSV:**", list(df_teste.columns))
+            df_teste["Oficina_Raw"] = df_teste[0].astype(str).str.strip()
             
-            col_ofic = next((c for c in df_teste.columns if any(k in c.upper() for k in ["OFICINA", "LOCAL", "ESCR", "ESTABELECIMENTO"])), df_teste.columns[0])
-            col_val = next((c for c in df_teste.columns if any(k in c.upper() for k in ["TOTAL", "LIQ", "VALOR", "IMPORT", "BRUTO"])), df_teste.columns[-1])
-            col_data = next((c for c in df_teste.columns if any(k in c.upper() for k in ["DATA", "EMISS", "DIA", "PERIODO"])), df_teste.columns[-2])
-
-            df_teste["Oficina_Raw"] = df_teste[col_ofic].astype(str).str.strip()
-            
-            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan", "SUBTOTAL", "OFICINA", "------------------------------------------------------------------------------------------------------------------------"]
+            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan", "SUBTOTAL", "OFICINA"]
             df_teste = df_teste[~df_teste["Oficina_Raw"].str.upper().isin(invalidos)]
             df_teste = df_teste[~df_teste["Oficina_Raw"].str.startswith("*")]
-            df_teste = df_teste[~df_teste["Oficina_Raw"].str.startswith("Ano")]
+            df_teste = df_teste[~df_teste["Oficina_Raw"].str.contains("Ano :", na=False)]
 
-            df_teste["Data_Teste"] = pd.to_datetime(df_teste[col_data], dayfirst=True, errors="coerce")
+            col_data_idx = None
+            col_val_idx = None
             
-            s_clean = df_teste[col_val].astype(str).str.replace("€", "", regex=False).str.strip()
-            s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-            df_teste["Valor_Teste"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
+            for col in df_teste.columns:
+                if col == 0: continue
+                parsed = pd.to_datetime(df_teste[col], dayfirst=True, errors='coerce')
+                if parsed.notna().mean() > 0.05:
+                    col_data_idx = col
+                    break
+                    
+            for col in reversed(df_teste.columns):
+                if col != 0 and col != col_data_idx:
+                    s_sample = df_teste[col].astype(str).str.replace('€', '').str.strip()
+                    num_check = pd.to_numeric(s_sample.str.replace('.', '', regex=False).str.replace(',', '.', regex=False), errors='coerce')
+                    if num_check.notna().mean() > 0.05:
+                        col_val_idx = col
+                        break
 
-            # Tabela resumo por Oficina
+            if col_data_idx is not None and col_val_idx is not None:
+                df_teste["Data_Teste"] = pd.to_datetime(df_teste[col_data_idx], dayfirst=True, errors="coerce")
+                
+                s_clean = df_teste[col_val_idx].astype(str).str.replace("€", "", regex=False).str.strip()
+                s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                df_teste["Valor_Teste"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
+            else:
+                df_teste["Data_Teste"] = pd.NaT
+                df_teste["Valor_Teste"] = 0.0
+
             df_resumo_oficina = df_teste.groupby("Oficina_Raw", as_index=False)["Valor_Teste"].sum()
             df_resumo_oficina = df_resumo_oficina.sort_values(by="Valor_Teste", ascending=False)
             
@@ -729,4 +748,4 @@ else:
             st.dataframe(df_resumo_oficina.style.format({"Valor_Teste": "{:,.2f} €"}), use_container_width=True)
             
             st.subheader("🔍 Amostra das Primeiras Linhas Processadas")
-            st.dataframe(df_teste[[col_ofic, col_data, col_val, "Valor_Teste"]].head(15), use_container_width=True)
+            st.dataframe(df_teste[[0, col_data_idx if col_data_idx else 1, col_val_idx if col_val_idx else 2, "Valor_Teste"]].head(15), use_container_width=True)
