@@ -494,7 +494,8 @@ else:
             st.warning("⚠️ Carregue os ficheiros CSV do Mapa de Faturação 1 e 2 na barra lateral.")
         else:
             idx_ofic = 0
-            idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
+            # Ajuste dinâmico ou índice correto para o valor faturado (geralmente penúltima ou antepenúltima coluna com números)
+            idx_val = 26 if df_fact_total.shape[1] > 26 else df_fact_total.shape[1] - 3
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
 
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
@@ -690,9 +691,10 @@ else:
                                     partes = p
                                     break
                                     
-                            if len(partes) > 24:
+                            if len(partes) > 25:
                                 oficina_raw = partes[0]
-                                val_str = partes[24]
+                                # Vamos usar a coluna correta onde está a faturação (índice 26 ou última coluna monetária)
+                                val_str = partes[26] if len(partes) > 26 else partes[-2]
                                 
                                 val_clean = str(val_str).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
                                 try:
