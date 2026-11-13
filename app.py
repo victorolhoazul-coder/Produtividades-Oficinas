@@ -452,14 +452,14 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura com header=5 para apanhar exatamente a linha dos cabeçalhos do CSV
+        # 2. Leitura robusta dos CSVs da pasta (apanha MOTOREX e MULTIAUTO independentemente de acentos)
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
         if all(f is None for f in csv_fontes):
             csv_fontes = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
             if not csv_fontes:
-                csv_fontes = glob.glob("*FACTURAÇÃO*.csv")
+                csv_fontes = glob.glob("*FACTUR*.csv")
             if not csv_fontes:
                 csv_fontes = glob.glob("*.csv")
                 
@@ -520,7 +520,7 @@ else:
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
 
-            # 3. Mapeamento direto e rigoroso com base na tabela Agrupamento_oficinas
+            # 3. Mapeamento direto com base na tabela Agrupamento_oficinas
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
@@ -544,7 +544,7 @@ else:
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
                 
-            # Filtro exato e direto pela oficina selecionada (sempre com correspondência exata de string)
+            # Filtro exato e direto pela oficina selecionada
             df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"] == oficina_selecionada_fat]
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total[df_fact_total["Oficina_CSV"] == oficina_selecionada_fat]
