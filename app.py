@@ -407,7 +407,7 @@ else:
             df_filtrado_local = df_completo[df_completo["Local"] == sel_local] if sel_local != "Todas" else df_completo
 
             oficinas_unicas = sorted(df_filtrado_local["Oficina"].dropna().astype(str).unique().tolist())
-            oficinas_disponiveis = (["Todas"] + oficinas_unicas) if len(oficinas_unicas) > 1 else oficinas_unicas
+            oficinas_disponiveis = (["Todas"] + oficinas_unicas) if len(oficinas_unicas) > 1 else oficinas_disponiveis
             sel_oficina = st.selectbox("Selecionar Oficina", oficinas_disponiveis if oficinas_disponiveis else ["Sem acesso"])
 
         df_final_filtro = df_filtrado_local[df_filtrado_local["Oficina"] == sel_oficina] if sel_oficina != "Todas" else df_filtrado_local
@@ -513,6 +513,11 @@ else:
 
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
             
+            # Remover linhas que são cabeçalhos ou títulos do relatório (ex: "MAPA DE FACTURAÇÃO", "OFICINA", etc.)
+            titulos_invalidos = ["MAPA DE FACTURAÇÃO", "MAPA DE FACTURACAO", "OFICINA", "TOTAL", "NAN", ""]
+            df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.upper().isin(titulos_invalidos)]
+            df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.upper().str.startswith("MAPA")]
+
             # Conversão ultra-robusta da Data
             col_data_raw = df_fact_total.iloc[:, idx_data]
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
@@ -543,11 +548,11 @@ else:
             else:
                 df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
 
-            # Limpeza e filtragem de opções válidas para o selectbox (removendo valores vazios ou asteriscos)
-            oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and not set(o.strip()).issubset({"*"})])
+            # Limpeza e filtragem de opções válidas para o selectbox
+            oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and o.upper() not in titulos_invalidos and not set(o.strip()).issubset({"*"})])
             if not df_orc.empty:
                 df_orc.columns = [str(c).strip() for c in df_orc.columns]
-                oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and not set(o.strip()).issubset({"*"})])
+                oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and o.upper() not in titulos_invalidos and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
             if not oficinas_disponiveis_fat:
@@ -564,8 +569,8 @@ else:
 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
-            # Filtro ultra-seguro com regex=False para evitar erros com caracteres especiais
-            if sel_clean and not set(sel_clean).issubset({"*"}):
+            # Filtro ultra-seguro com regex=False
+            if sel_clean and sel_clean not in titulos_invalidos and not set(sel_clean).issubset({"*"}):
                 df_oficina_fat = df_fact_total[
                     df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False) |
                     df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)
