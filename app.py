@@ -270,7 +270,6 @@ def oficina_permitida_check(oficina_nome):
 
 def detetar_cidade(nome_oficina):
     u = limpar_str(nome_oficina)
-    # Verificação precisa para evitar falsos positivos
     if " BEJA" in u or u.endswith("BEJA") or "BEJA " in u: return "Beja"
     if " FARO" in u or u.endswith("FARO") or "FARO " in u: return "Faro"
     if " EVORA" in u or u.endswith("EVORA") or "EVORA " in u or "ÉVORA" in u: return "Évora"
@@ -563,6 +562,7 @@ else:
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
+            # Se for utilizador restrito com agrupar = sim, usamos diretamente a lista do agrupamento da Coluna D
             if st.session_state.acesso_total:
                 oficinas_autorizadas_lista = oficinas_disponiveis_fat
             else:
