@@ -517,7 +517,7 @@ else:
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
-                col_agrup_destino = df_agrup.columns[1] if len(df_agrup.columns) > 1 else df_agrup.columns[0]
+                col_agrup_destino = df_agrup.columns[3] if len(df_agrup.columns) > 3 else df_agrup.columns[1]
                 
                 dict_agrupamento = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip().str.upper(), df_agrup[col_agrup_destino].astype(str).str.strip()))
                 df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"].str.upper().map(dict_agrupamento).fillna(df_fact_total["Oficina_CSV"])
@@ -651,7 +651,7 @@ else:
                 st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
-        st.subheader("🧪 Resumo de Faturação por Oficina (Direto dos CSVs)")
+        st.subheader("🧪 Resumo de Faturação por Oficina (Direto dos CSVs com Agrupamento)")
         st.caption("Apresenta o valor total faturado acumulado por oficina, mapeando corretamente com a folha 'Agrupamento_oficinas'.")
         
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
@@ -659,7 +659,7 @@ else:
         if all(f is None for f in csv_fontes_teste):
             st.warning("⚠️ Por favor, faça o upload dos ficheiros CSV (Mapa de Faturação 1 e 2) na barra lateral esquerda.")
         else:
-            # Carregar o dicionário exato de agrupamentos (Coluna 0 = marca original, Coluna 1 = oficina agrupada principal)
+            # Carregar o dicionário exato de agrupamentos (Coluna 0 = origem, Coluna 3 = destino correto)
             excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
             target_orc_file = file_orc_up if file_orc_up is not None else (excel_orc_path if os.path.exists(excel_orc_path) else None)
             dict_agrupamento = {}
@@ -668,9 +668,9 @@ else:
                 try:
                     df_agrup_test = pd.read_excel(target_orc_file, sheet_name="Agrupamento_oficinas")
                     df_agrup_test.columns = [str(c).strip() for c in df_agrup_test.columns]
-                    if len(df_agrup_test.columns) >= 2:
+                    if len(df_agrup_test.columns) >= 4:
                         col_origem = df_agrup_test.columns[0]
-                        col_destino = df_agrup_test.columns[1]
+                        col_destino = df_agrup_test.columns[3]
                         for _, r in df_agrup_test.iterrows():
                             orig = str(r[col_origem]).strip()
                             dest = str(r[col_destino]).strip()
@@ -687,9 +687,12 @@ else:
                         if hasattr(file_f, "getvalue"):
                             file_bytes = io.BytesIO(file_f.getvalue())
                         elif hasattr(file_f, "read"):
-                            file_bytes = io.BytesIO(file_f.read())
+                            file_bytes = file_f.read()
                         else:
                             file_bytes = file_f
+
+                        if isinstance(file_bytes, bytes):
+                            file_bytes = io.BytesIO(file_bytes)
 
                         file_bytes.seek(0)
                         conteudo = file_bytes.read().decode("iso-8859-1", errors="ignore")
