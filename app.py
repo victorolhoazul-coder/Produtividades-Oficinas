@@ -455,7 +455,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # --- LEITURA ROBUSTA DOS CSVs (SUPORTE A UPLOADS E DISCO) ---
+        # --- LEITURA BLINDADA DOS CSVs DE FATURAÇÃO (SUPORTE A UPLOADS E DISCO) ---
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         lista_streams = [f for f in csv_fontes if f is not None]
@@ -481,7 +481,7 @@ else:
                     try:
                         file_bytes.seek(0)
                         temp_df = pd.read_csv(file_bytes, sep=sep_val, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
-                        if not temp_df.empty and len(temp_df.columns) > 5:
+                        if not temp_df.empty and len(temp_df.columns) > 1:
                             df_fact_total = pd.concat([df_fact_total, temp_df], ignore_index=True)
                             break
                     except Exception:
@@ -505,7 +505,7 @@ else:
             for col in df_fact_total.columns:
                 if col == 0: continue
                 parsed = pd.to_datetime(df_fact_total[col], dayfirst=True, errors='coerce')
-                if parsed.notna().mean() > 0.05:
+                if parsed.notna().mean() > 0.01:
                     col_data_idx = col
                     break
                     
@@ -513,7 +513,7 @@ else:
                 if col != 0 and col != col_data_idx:
                     s_sample = df_fact_total[col].astype(str).str.replace('€', '').str.strip()
                     num_check = pd.to_numeric(s_sample.str.replace('.', '', regex=False).str.replace(',', '.', regex=False), errors='coerce')
-                    if num_check.notna().mean() > 0.05:
+                    if num_check.notna().mean() > 0.01:
                         col_val_idx = col
                         break
 
@@ -583,7 +583,7 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # --- LEITURA EXATA DO ORÇAMENTO ORIGINAL ---
+            # --- LEITURA EXATA DO ORÇAMENTO ---
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
                 col_ofic_orc = df_orc.columns[0]
@@ -704,7 +704,7 @@ else:
                     try:
                         file_bytes.seek(0)
                         temp_df = pd.read_csv(file_bytes, sep=sep_val, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
-                        if not temp_df.empty and len(temp_df.columns) > 5:
+                        if not temp_df.empty and len(temp_df.columns) > 1:
                             df_teste = pd.concat([df_teste, temp_df], ignore_index=True)
                             break
                     except Exception:
@@ -728,7 +728,7 @@ else:
             for col in df_teste.columns:
                 if col == 0: continue
                 parsed = pd.to_datetime(df_teste[col], dayfirst=True, errors='coerce')
-                if parsed.notna().mean() > 0.05:
+                if parsed.notna().mean() > 0.01:
                     col_data_idx = col
                     break
                     
@@ -736,7 +736,7 @@ else:
                 if col != 0 and col != col_data_idx:
                     s_sample = df_teste[col].astype(str).str.replace('€', '').str.strip()
                     num_check = pd.to_numeric(s_sample.str.replace('.', '', regex=False).str.replace(',', '.', regex=False), errors='coerce')
-                    if num_check.notna().mean() > 0.05:
+                    if num_check.notna().mean() > 0.01:
                         col_val_idx = col
                         break
 
