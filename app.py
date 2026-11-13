@@ -452,16 +452,18 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura robusta dos CSVs da pasta (apanha MOTOREX e MULTIAUTO independentemente de acentos)
+        # 2. Leitura robusta dos CSVs (com diagnóstico)
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
         if all(f is None for f in csv_fontes):
-            csv_fontes = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
-            if not csv_fontes:
-                csv_fontes = glob.glob("*FACTUR*.csv")
-            if not csv_fontes:
-                csv_fontes = glob.glob("*.csv")
+            csv_fontes = glob.glob("*MOTOREX*.csv") + glob.glob("*MULTIAUTO*.csv") + glob.glob("*FACTURAÇÃO*.csv") + glob.glob("*.csv")
+            csv_fontes = list(dict.fromkeys(csv_fontes))
+            
+        if not csv_fontes:
+            st.error("⚠️ Nenhum ficheiro CSV encontrado na pasta do projeto! Carrega os ficheiros manualmente na barra lateral (Admin).")
+        else:
+            st.caption(f"📁 Ficheiros CSV detetados: {csv_fontes}")
                 
         for file_f in csv_fontes:
             if file_f is not None:
@@ -469,8 +471,11 @@ else:
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
                     elif isinstance(file_f, str):
-                        with open(file_f, "rb") as f_in:
-                            file_bytes = io.BytesIO(f_in.read())
+                        if os.path.exists(file_f):
+                            with open(file_f, "rb") as f_in:
+                                file_bytes = io.BytesIO(f_in.read())
+                        else:
+                            continue
                     else:
                         file_bytes = file_f
 
