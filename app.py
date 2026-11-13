@@ -75,7 +75,7 @@ mes_selecionado = st.sidebar.selectbox(
     "Mês:", 
     options=list(meses_pt.keys()), 
     format_func=lambda x: meses_pt[x].capitalize(), 
-    index=list(meses_pt.keys()).index(mes_atual_num) if (mes_atual_num in mes_pt and ano_corrente == 2026) else 10
+    index=list(meses_pt.keys()).index(mes_atual_num) if (mes_atual_num in meses_pt and ano_corrente == 2026) else 10
 )
 
 sigla_mes = meses_sigla.get(mes_selecionado, "NOV")
@@ -192,7 +192,6 @@ else:
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
         
-        # Leitura dos Orçamentos e Agrupamentos
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
         df_orc, df_agrup = pd.DataFrame(), pd.DataFrame()
         target_orc = file_orc_up if file_orc_up is not None else (excel_orc_path if os.path.exists(excel_orc_path) else None)
@@ -204,7 +203,6 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler orçamentos: {e}")
         
-        # Leitura dos CSVs de Faturação
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         if all(f is None for f in csv_fontes):
@@ -223,24 +221,20 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Nenhum ficheiro CSV de faturação encontrado ou carregado.")
         else:
-            # Diagnóstico visível para descobrirmos imediatamente as colunas
             with st.container():
                 st.success("✅ Ficheiros CSV lidos com sucesso! Veja abaixo o diagnóstico das colunas:")
                 st.write("Colunas detetadas no CSV:", list(df_fact_total.columns))
                 st.dataframe(df_fact_total.head(2))
 
-            # Vamos assumir que a coluna 0 é a oficina e procurar valores e datas
             idx_ofic = 0
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
             
-            # Listar oficinas únicas excluindo cabeçalhos
             oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_CSV"].unique() if o and "MAPA" not in o.upper() and "OFICINA" not in o.upper()])
             if not oficinas_disponiveis_fat:
                 oficinas_disponiveis_fat = ["Geral"]
 
             oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
             
-            # Métricas em branco para teste
             col_graf, col_kpi = st.columns([3, 1])
             with col_kpi:
                 st.metric(label="ORÇAMENTO MENSAL", value="0 €")
