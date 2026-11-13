@@ -487,7 +487,6 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Carregue os ficheiros CSV do Mapa de Faturação 1 e 2 na barra lateral.")
         else:
-            # Coluna A = índice 0 (Oficina), Coluna Y = índice 24 (Valor), Coluna AC = índice 28 (Data)
             idx_ofic = 0
             idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
@@ -649,14 +648,14 @@ else:
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Resumo de Faturação por Oficina (Direto dos CSVs)")
-        st.caption("Apresenta o valor total faturado acumulado por oficina, somando a coluna Y (índice 24) agrupada pela coluna A (índice 0).")
+        st.caption("Apresenta o valor total faturado acumulado por oficina, somando diretamente a coluna Y (índice 24) agrupada pela coluna A (índice 0).")
         
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
         
         if all(f is None for f in csv_fontes_teste):
             st.warning("⚠️ Por favor, faça o upload dos ficheiros CSV (Mapa de Faturação 1 e 2) na barra lateral esquerda.")
         else:
-            df_teste = pd.DataFrame()
+            linhas_processadas = []
             
             for file_f in csv_fontes_teste:
                 if file_f is not None:
@@ -664,52 +663,47 @@ else:
                         if hasattr(file_f, "getvalue"):
                             file_bytes = io.BytesIO(file_f.getvalue())
                         elif hasattr(file_f, "read"):
-                            file_f.seek(0)
                             file_bytes = io.BytesIO(file_f.read())
                         else:
                             file_bytes = file_f
 
                         file_bytes.seek(0)
-                        t_temp = pd.DataFrame()
-                        try:
-                            t_temp = pd.read_csv(file_bytes, sep=';', engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
-                            if len(t_temp.columns) <= 1:
-                                file_bytes.seek(0)
-                                t_temp = pd.read_csv(file_bytes, sep=',', engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
-                        except:
-                            pass
-                            
-                        if not t_temp.empty and len(t_temp.columns) > 1:
-                            df_teste = pd.concat([df_teste, t_temp], ignore_index=True)
+                        conteudo = file_bytes.read().decode("iso-8859-1", errors="ignore")
+                        linhas = conteudo.splitlines()
+                        
+                        for linha in linhas:
+                            linha_strip = linha.strip()
+                            if not linha_strip:
+                                continue
+                                
+                            # Tentar detetar o separador correto (ponto e vírgula, tabulação ou vírgula)
+                            partes = []
+                            for sep in [";", "\t", ","]:
+                                p = [x.strip().replace('"', '') for x in linha_strip.split(sep)]
+                                if len(p) > 10:  # Linha válida com colunas suficientes
+                                    partes = p
+                                    break
+                                    
+                            if len(partes) > 24:
+                                oficina = partes[0]
+                                val_str = partes[24] # Coluna Y (índice 24)
+                                
+                                # Limpeza e conversão rigorosa do valor numérico português
+                                val_clean = val_str.replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+                                try:
+                                    valor = float(val_clean)
+                                    if valor > 0 and oficina.upper() not in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] and not oficina.startswith("*"):
+                                        linhas_processadas.append({"Oficina": oficina, "Total Faturado": valor})
+                                except:
+                                    pass
                     except Exception as e:
                         pass
                         
-            if df_teste.empty:
-                st.warning("⚠️ Os ficheiros carregados estão vazios ou o formato não foi reconhecido.")
+            if not linhas_processadas:
+                st.warning("⚠️ Não foram encontrados dados válidos. Verifique se os ficheiros CSV corretos foram carregados nos botões da barra lateral.")
             else:
-                # Coluna A = índice 0 (Oficina), Coluna Y = índice 24 (Valor)
-                idx_ofic = 0
-                idx_val = 24 if df_teste.shape[1] > 24 else df_teste.shape[1] - 1
-
-                df_teste["Oficina"] = df_teste.iloc[:, idx_ofic].astype(str).str.strip()
-                
-                # Filtrar cabeçalhos, rodapés e linhas vazias
-                invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"]
-                df_filtrado = df_teste[~df_teste["Oficina"].str.upper().apply(lambda x: any(inv in x for inv in invalidos))]
-                df_filtrado = df_filtrado[~df_filtrado["Oficina"].str.startswith("*")]
-                df_filtrado = df_filtrado[df_filtrado["Oficina"].notna() & (df_filtrado["Oficina"] != "")]
-
-                col_valor_raw = df_filtrado.iloc[:, idx_val]
-                if col_valor_raw.dtype == object:
-                    s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
-                    s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-                    df_filtrado["Valor"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
-                else:
-                    df_filtrado["Valor"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
-                    
-                df_resumo = df_filtrado.groupby("Oficina", as_index=False)["Valor"].sum()
-                df_resumo = df_resumo[df_resumo["Valor"] > 0]
-                df_resumo.rename(columns={"Oficina": "Oficina", "Valor": "Total Faturado"}, inplace=True)
+                df_resumo = pd.DataFrame(linhas_processadas)
+                df_resumo = df_resumo.groupby("Oficina", as_index=False)["Total Faturado"].sum()
                 df_resumo = df_resumo.sort_values(by="Total Faturado", ascending=False)
                 
                 total_geral = df_resumo["Total Faturado"].sum()
