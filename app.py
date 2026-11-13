@@ -589,7 +589,6 @@ else:
             df_completo_dias = pd.DataFrame({"Data": dias_uteis_lista})
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             
-            # Formatar a data como string legível (ex: "02/11/2026") para o eixo X categórico (evita buracos de fim de semana)
             df_completo_dias["Data_Str"] = pd.to_datetime(df_completo_dias["Data"]).dt.strftime("%d/%m/%Y")
             
             hoje_atual = datetime.now().date()
@@ -662,7 +661,6 @@ else:
             col_graf, col_kpi = st.columns([3, 1])
             
             with col_graf:
-                # Eixo X categórico ordenado pela sequência exata dos dias úteis
                 base = alt.Chart(df_completo_dias).encode(
                     x=alt.X('Data_Str:N', title='Data', sort=list(df_completo_dias["Data_Str"]), axis=alt.Axis(labelAngle=-45))
                 )
@@ -691,7 +689,18 @@ else:
                 st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.0f} €".replace(",", " "))
                 st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
                 st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
-                st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
+                
+                # Desvio de Orçamento dinâmico com cor verde se positivo e vermelho se negativo
+                cor_desvio = "green" if desvio_orcamento >= 0 else "red"
+                desvio_formatado = f"{desvio_orcamento:,.0f} €".replace(",", " ")
+                
+                st.markdown(f"""
+                    <div style="font-size: 14px; font-weight: 600; color: rgb(49, 51, 63); margin-bottom: 0px;">DESVIO ORÇAMENTO</div>
+                    <div style="font-size: 24px; font-weight: 700; color: {cor_desvio}; margin-top: 0px; margin-bottom: 0px;">{desvio_formatado}</div>
+                """, unsafe_allow_html=True)
+                
+                # Delta extra pequeno indicativo
+                st.metric(label="", value="", delta=f"{desvio_orcamento:,.0f} €".replace(",", " "), label_visibility="collapsed")
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Resumo de Faturação por Oficina (Direto da Coluna A)")
