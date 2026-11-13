@@ -452,7 +452,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura universal e blindada ignorando o cabeçalho descritivo inicial dos CSVs
+        # 2. Leitura universal e blindada dos CSVs de Faturação
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
@@ -493,7 +493,7 @@ else:
         else:
             df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
             
-            col_ofic = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["OFICINA", "LOCAL", "ESCO", "NOME", "CLIENTE"])), df_fact_total.columns[0])
+            col_ofic = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["OFICINA", "LOCAL", "ESCR", "ESTABELECIMENTO"])), df_fact_total.columns[0])
             col_val = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["TOTAL", "LIQ", "VALOR", "IMPORT", "BRUTO"])), df_fact_total.columns[-1])
             col_data = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["DATA", "EMISS", "DIA", "PERIODO"])), df_fact_total.columns[-2])
 
@@ -527,10 +527,11 @@ else:
             else:
                 df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
 
-            oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
+            oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and len(o) < 40 and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
+            
             if not df_orc.empty:
                 df_orc.columns = [str(c).strip() for c in df_orc.columns]
-                oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
+                oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper()])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
             if not oficinas_disponiveis_fat:
@@ -552,8 +553,6 @@ else:
                 df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)
             )
             df_oficina_fat = df_fact_total[mask_oficina]
-            if df_oficina_fat.empty:
-                df_oficina_fat = df_fact_total
             
             df_mes_ano = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
             if not df_mes_ano.empty:
