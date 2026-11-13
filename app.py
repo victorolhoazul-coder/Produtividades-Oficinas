@@ -504,14 +504,14 @@ else:
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.upper().isin(invalidos)]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.startswith("*")]
 
-            # Conversão da Data (Coluna AC / col_data)
+            # Conversão da Data
             col_data_raw = df_fact_total[col_data] if col_data in df_fact_total.columns else df_fact_total.iloc[:, 28]
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
             
             if df_fact_total["Data_Parsed"].isna().mean() > 0.8:
                 df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, format="mixed", dayfirst=True, errors="coerce")
 
-            # Tratamento dos valores numéricos (Coluna Y / col_val)
+            # Tratamento dos valores numéricos
             col_valor_raw = df_fact_total[col_val] if col_val in df_fact_total.columns else df_fact_total.iloc[:, 24]
             if col_valor_raw.dtype == object:
                 s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
@@ -520,14 +520,14 @@ else:
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
 
-            # 3. Mapeamento e Agrupamento
+            # 3. Mapeamento direto e rigoroso com base na tabela Agrupamento_oficinas
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
                 col_agrup_destino = df_agrup.columns[3] if len(df_agrup.columns) > 3 else df_agrup.columns[1]
                 
-                dict_agrupamento = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip().str.upper(), df_agrup[col_agrup_destino].astype(str).str.strip()))
-                df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"].str.upper().map(dict_agrupamento).fillna(df_fact_total["Oficina_CSV"])
+                dict_agrupamento = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip(), df_agrup[col_agrup_destino].astype(str).str.strip()))
+                df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"].map(dict_agrupamento).fillna(df_fact_total["Oficina_CSV"])
             else:
                 df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
 
@@ -544,23 +544,11 @@ else:
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
                 
-            def limpar_str(s):
-                if pd.isna(s): return ""
-                s_nfkd = unicodedata.normalize('NFKD', str(s))
-                return "".join([c for c in s_nfkd if not unicodedata.combining(c)]).upper().strip()
-
-            sel_clean = limpar_str(oficina_selecionada_fat)
-            
-            # Filtro por oficina
-            if sel_clean and sel_clean != "GERAL":
-                mask = (df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean) | \
-                       (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean) | \
-                       (df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)) | \
-                       (df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False))
-                df_oficina_fat = df_fact_total[mask]
-                if df_oficina_fat.empty:
-                    df_oficina_fat = df_fact_total
-            else:
+            # Filtro exato e direto pela oficina selecionada (sempre com correspondência exata de string)
+            df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"] == oficina_selecionada_fat]
+            if df_oficina_fat.empty:
+                df_oficina_fat = df_fact_total[df_fact_total["Oficina_CSV"] == oficina_selecionada_fat]
+            if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total
             
             # Filtro estritamente pelo mês e ano selecionados
@@ -590,7 +578,13 @@ else:
                 col_mes_orc = df_orc.columns[3]
                 col_val_orc = df_orc.columns[4]
                 
+                def limpar_str(s):
+                    if pd.isna(s): return ""
+                    s_nfkd = unicodedata.normalize('NFKD', str(s))
+                    return "".join([c for c in s_nfkd if not unicodedata.combining(c)]).upper().strip()
+
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
+                sel_clean = limpar_str(oficina_selecionada_fat)
                 
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic_orc])
