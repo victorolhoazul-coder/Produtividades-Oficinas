@@ -656,12 +656,11 @@ else:
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Laboratório de Testes - Leitura Direta de CSVs de Faturação")
-        st.caption("Este separador lê os ficheiros CSV carregados e mostra imediatamente todas as linhas brutas encontradas.")
+        st.caption("Este separador lê os ficheiros CSV carregados e processa os dados reais de faturação por oficina.")
         
         df_teste = pd.DataFrame()
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
         
-        # Se não houver upload feito pelo utilizador, procuramos por ficheiros na pasta local
         if all(f is None for f in csv_fontes_teste):
             csv_fontes_teste = glob.glob("*.csv")
             
@@ -682,16 +681,37 @@ else:
                             file_bytes = file_f
 
                         file_bytes.seek(0)
-                        # Leitura crua sem filtros para garantir que vemos o conteúdo real
-                        t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
+                        # Ignoramos as linhas iniciais de cabeçalho do relatório para apanhar diretamente os dados
+                        t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", skiprows=8, header=None, on_bad_lines='skip')
                         if not t_temp.empty:
                             df_teste = pd.concat([df_teste, t_temp], ignore_index=True)
                     except Exception as e:
                         st.error(f"Erro ao ler ficheiro: {e}")
                         
             if df_teste.empty:
-                st.warning("⚠️ Os ficheiros encontrados estão vazios.")
+                st.warning("⚠️ Os ficheiros carregados não contêm dados válidos após o cabeçalho.")
             else:
-                st.success(f"✅ Ficheiros lidos com sucesso! Total de linhas encontradas: {len(df_teste)}")
-                st.write("Conteúdo bruto completo detetado nos CSVs:")
-                st.dataframe(df_teste, use_container_width=True)
+                idx_ofic = 0
+                idx_val = 24 if df_teste.shape[1] > 24 else df_teste.shape[1] - 1
+                
+                df_teste["Oficina_Raw"] = df_teste.iloc[:, idx_ofic].astype(str).str.strip()
+                
+                invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan"]
+                df_teste = df_teste[~df_teste["Oficina_Raw"].str.upper().isin(invalidos)]
+                df_teste = df_teste[~df_teste["Oficina_Raw"].str.startswith("*")]
+                df_teste = df_teste[df_teste["Oficina_Raw"].notna() & (df_teste["Oficina_Raw"] != "")]
+
+                col_valor_raw = df_teste.iloc[:, idx_val]
+                if col_valor_raw.dtype == object:
+                    s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
+                    s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                    df_teste["Valor_Teste"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
+                else:
+                    df_teste["Valor_Teste"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
+                    
+                df_resumo_oficina = df_teste.groupby("Oficina_Raw", as_index=False)["Valor_Teste"].sum()
+                df_resumo_oficina = df_resumo_oficina[df_resumo_oficina["Valor_Teste"] > 0]
+                df_resumo_oficina = df_resumo_oficina.sort_values(by="Valor_Teste", ascending=False)
+                
+                st.success("✅ Resumo de faturação gerado com sucesso!")
+                st.dataframe(df_resumo_oficina.style.format({"Valor_Teste": "{:,.2f} €"}), use_container_width=True)
