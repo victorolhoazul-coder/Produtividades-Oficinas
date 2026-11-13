@@ -562,7 +562,7 @@ else:
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
-            # Se for utilizador restrito com agrupar = sim, usamos diretamente a lista do agrupamento da Coluna D
+            # Se for utilizador restrito com agrupar = sim, usamos diretamente a lista da Coluna D
             if st.session_state.acesso_total:
                 oficinas_autorizadas_lista = oficinas_disponiveis_fat
             else:
@@ -582,7 +582,12 @@ else:
                 cidade_selecionada = st.selectbox("Selecionar Cidade:", options=cidades_autorizadas)
 
             if cidade_selecionada != "Geral":
-                oficinas_filtradas_cidade = [o for o in oficinas_autorizadas_lista if detetar_cidade(o) == cidade_selecionada]
+                # Se o perfil estiver agrupado (como o da dsa para Faro), respeitamos exatamente as oficinas desse agrupamento
+                if not st.session_state.acesso_total and st.session_state.agrupar_perfil and st.session_state.oficinas_agrupadas_perfil:
+                    oficinas_filtradas_cidade = [o for o in st.session_state.oficinas_agrupadas_perfil if detetar_cidade(o) == cidade_selecionada or cidade_selecionada.upper() in o.upper()]
+                else:
+                    oficinas_filtradas_cidade = [o for o in oficinas_autorizadas_lista if detetar_cidade(o) == cidade_selecionada]
+                
                 if not oficinas_filtradas_cidade:
                     oficinas_filtradas_cidade = [o for o in oficinas_autorizadas_lista if cidade_selecionada.upper() in o.upper()]
             else:
