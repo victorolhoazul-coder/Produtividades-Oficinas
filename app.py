@@ -570,7 +570,7 @@ else:
             df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
             df_diario = df_diario.dropna(subset=["Data"]).sort_values("Data")
             
-            # Gerar APENAS DIAS ÚTEIS do mês (removendo fins de semana e feriados)
+            # Gerar APENAS DIAS ÚTEIS do mês inteiro para o eixo X do gráfico (tal como no Excel do exemplo)
             inicio_mes = date(ano_corrente, mes_selecionado, 1)
             if mes_selecionado == 12:
                 fim_mes = date(ano_corrente + 1, 1, 1) - timedelta(days=1)
@@ -589,7 +589,7 @@ else:
             df_completo_dias = pd.DataFrame({"Data": dias_uteis_lista})
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             
-            # Limite atual do gráfico (hoje ou fim do mês)
+            # Limite atual do dia (para saber onde param as barras reais)
             hoje_atual = datetime.now().date()
             if ano_corrente == hoje_atual.year and mes_selecionado == hoje_atual.month:
                 data_limite_grafico = hoje_atual
@@ -598,9 +598,13 @@ else:
 
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # Cortar dados futuros
-            df_completo_dias.loc[df_completo_dias["Data"] > data_limite_grafico, "Facturacao_Acumulada"] = None
-            df_completo_dias.loc[df_completo_dias["Data"] > data_limite_grafico, "Facturacao_Diaria"] = None
+            # Se for dia futuro, a faturação acumulada fica a zero/null para as barras pararem no dia atual
+            df_completo_dias["Facturacao_Acumulada_Graf"] = df_completo_dias.apply(
+                lambda row: row["Facturacao_Acumulada"] if row["Data"] <= data_limite_grafico else None, axis=1
+            )
+            df_completo_dias["Facturacao_Diaria_Graf"] = df_completo_dias.apply(
+                lambda row: row["Facturacao_Diaria"] if row["Data"] <= data_limite_grafico else 0.0, axis=1
+            )
 
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
@@ -639,24 +643,20 @@ else:
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
-            # Orçamento acumulado linear por dia útil (crescimento reto)
+            # Linha de orçamento contínua e reta por cada dia útil ao longo de todo o mês
             orcamentos_ac = []
             acum = 0.0
             for d in df_completo_dias["Data"]:
-                if d <= data_limite_grafico:
-                    acum += orcamento_diario
-                    orcamentos_ac.append(acum)
-                else:
-                    acum += orcamento_diario
-                    orcamentos_ac.append(None) # Cortar linha de orçamento no dia atual
+                acum += orcamento_diario
+                orcamentos_ac.append(acum)
             df_completo_dias["Orcamento_Acumulado"] = orcamentos_ac
             
-            # Faturação à data e Orçamento à data para cálculo correto do desvio
+            # Faturação à data e Orçamento acumulado correspondente aos dias úteis decorridos até à data
             val_fat_reais = df_diario[df_diario["Data"] <= data_limite_grafico]["Facturacao_Diaria"]
             facturacao_a_data = val_fat_reais.sum() if not val_fat_reais.empty else 0.0
             
-            orcamento_a_data_list = df_completo_dias[df_completo_dias["Data"] <= data_limite_grafico]["Orcamento_Acumulado"]
-            orcamento_a_data = orcamento_a_data_list.iloc[-1] if not orcamento_a_data_list.empty else 0.0
+            dias_uteis_decorridos_reais = len(df_completo_dias[df_completo_dias["Data"] <= data_limite_grafico])
+            orcamento_a_data = dias_uteis_decorridos_reais * orcamento_diario
             
             desvio_orcamento = facturacao_a_data - orcamento_a_data
             
@@ -668,11 +668,11 @@ else:
                 )
                 
                 barras = base.mark_bar(color='#115e59').encode(
-                    y=alt.Y('Facturacao_Acumulada:Q', title='Valor (€)'),
+                    y=alt.Y('Facturacao_Acumulada_Graf:Q', title='Valor (€)'),
                     tooltip=[
                         alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
-                        alt.Tooltip('Facturacao_Diaria:Q', title='Faturação Diária', format=',.2f'),
-                        alt.Tooltip('Facturacao_Acumulada:Q', title='Faturação Acumulada', format=',.2f')
+                        alt.Tooltip('Facturacao_Diaria_Graf:Q', title='Faturação Diária', format=',.2f'),
+                        alt.Tooltip('Facturacao_Acumulada_Graf:Q', title='Faturação Acumulada', format=',.2f')
                     ]
                 )
                 
