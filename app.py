@@ -455,7 +455,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # --- LEITURA BLINDADA DOS CSVs DE FATURAÇÃO (SUPORTE A UPLOADS E DISCO) ---
+        # --- LEITURA BLINDADA DOS CSVs DE FATURAÇÃO ---
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         lista_streams = [f for f in csv_fontes if f is not None]
@@ -583,30 +583,32 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # --- LEITURA EXATA DO ORÇAMENTO ---
+            # --- LEITURA CORRIGIDA E PRECISA DO ORÇAMENTO POR MÊS E OFICINA ---
             orcamento_mensal = 0.0
-            if not df_orc.empty and len(df_orc.columns) >= 5:
+            if not df_orc.empty:
+                df_orc.columns = [str(c).strip() for c in df_orc.columns]
                 col_ofic_orc = df_orc.columns[0]
-                col_mes_orc = None
-                col_val_orc = df_orc.columns[4] if len(df_orc.columns) > 4 else df_orc.columns[-1]
                 
+                # Identifica qual a coluna numérica correspondente ao mês selecionado
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
+                col_mes_alvo = None
                 
                 for c in df_orc.columns:
-                    val_c_str = limpar_str(str(c))
-                    if nome_mes_alvo in val_c_str:
-                        col_mes_orc = c
+                    c_clean = limpar_str(c)
+                    if nome_mes_alvo in c_clean or str(mes_selecionado) in c_clean:
+                        col_mes_alvo = c
                         break
                 
-                if col_mes_orc is None:
-                    col_mes_orc = df_orc.columns[3] if len(df_orc.columns) > 3 else df_orc.columns[1]
-                    col_val_orc = df_orc.columns[4] if len(df_orc.columns) > 4 else df_orc.columns[-1]
+                if col_mes_alvo is None and len(df_orc.columns) > mes_selecionado:
+                    col_mes_alvo = df_orc.columns[mes_selecionado]
+                elif col_mes_alvo is None and len(df_orc.columns) > 4:
+                    col_mes_alvo = df_orc.columns[4]
 
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic_orc])
-                    
                     if sel_clean in ofic_row or ofic_row in sel_clean:
-                        val_raw = row[col_val_orc]
+                        # Tenta extrair o valor da coluna do mês
+                        val_raw = row[col_mes_alvo] if col_mes_alvo in df_orc.columns else row.values[-1]
                         try:
                             if isinstance(val_raw, (int, float)):
                                 v_num = float(val_raw)
@@ -618,21 +620,21 @@ else:
                                 break
                         except:
                             pass
-                            
+                
+                # Se não encontrou pela coluna exata, procura por qualquer número válido na linha da oficina
                 if orcamento_mensal == 0.0:
                     for _, row in df_orc.iterrows():
-                        for cell in row.values:
-                            cell_str = limpar_str(str(cell))
-                            if sel_clean in cell_str or cell_str in sel_clean:
-                                for cell_val in row.values:
-                                    try:
-                                        v_str = str(cell_val).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
-                                        v_num = float(v_str)
-                                        if v_num > 1000:
-                                            orcamento_mensal = v_num
-                                            break
-                                    except:
-                                        pass
+                        ofic_row = limpar_str(row[col_ofic_orc])
+                        if sel_clean in ofic_row or ofic_row in sel_clean:
+                            for val in row.values:
+                                try:
+                                    v_str = str(val).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+                                    v_num = float(v_str)
+                                    if v_num > 500: # Valor plausível de orçamento
+                                        orcamento_mensal = v_num
+                                        break
+                                except:
+                                    pass
                         if orcamento_mensal > 0:
                             break
 
@@ -757,4 +759,9 @@ else:
             st.dataframe(df_resumo_oficina.style.format({"Valor_Teste": "{:,.2f} €"}), use_container_width=True)
             
             st.subheader("🔍 Amostra das Primeiras Linhas Processadas")
-            st.dataframe(df_teste[[0, col_data_idx if col_data_idx else 1, col_val_idx if col_val_idx else 2, "Valor_Teste"]].head(15), use_container_width=True)
+            cols_amostra = [0]
+            if col_data_idx and col_data_idx < len(df_teste.columns): cols_amostra.append(col_data_idx)
+            if col_val_idx and col_val_idx < len(df_teste.columns): cols_amostra.append(col_val_idx)
+            cols_amostra.append("Valor_Teste")
+            
+            st.dataframe(df_teste[[c for c in cols_amostra if c in df_teste.columns]].head(15), use_container_width=True)
