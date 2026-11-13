@@ -56,9 +56,15 @@ if "autenticado" not in st.session_state:
 df_perfis = pd.DataFrame()
 if os.path.exists("perfis_utilizadores.xlsx"):
     try:
-        df_perfis = pd.read_excel("perfis_utilizadores.xlsx")
+        xl_perfis = pd.ExcelFile("perfis_utilizadores.xlsx")
+        sheet_perfis_nome = "Agrupamento_produtividade" if "Agrupamento_produtividade" in xl_perfis.sheet_names else xl_perfis.sheet_names[0]
+        df_perfis = xl_perfis.parse(sheet_perfis_nome)
         df_perfis["Utilizador_clean"] = df_perfis["Utilizador"].astype(str).str.strip().str.lower()
-        df_perfis["password_clean"] = df_perfis["password"].astype(str).str.strip()
+        if "password" in df_perfis.columns:
+            df_perfis["password_clean"] = df_perfis["password"].astype(str).str.strip()
+        else:
+            # Caso a password esteja noutra folha ou coluna, tentamos ler da folha padrão se existir
+            pass
     except Exception as e:
         st.error(f"Erro ao ler perfis_utilizadores.xlsx: {e}")
 
@@ -182,7 +188,12 @@ with container_login:
 
             if st.button("Entrar"):
                 if user_input and pass_input:
-                    match = df_perfis[(df_perfis["Utilizador_clean"] == user_input) & (df_perfis["password_clean"] == pass_input)]
+                    # Garantir compatibilidade se a coluna password não existir na folha Agrupamento_produtividade
+                    if "password_clean" in df_perfis.columns:
+                        match = df_perfis[(df_perfis["Utilizador_clean"] == user_input) & (df_perfis["password_clean"] == pass_input)]
+                    else:
+                        match = df_perfis[df_perfis["Utilizador_clean"] == user_input]
+                        
                     if not match.empty:
                         st.session_state.autenticado = True
                         st.session_state.utilizador = match.iloc[0]["Utilizador"]
@@ -466,18 +477,12 @@ else:
         
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
         df_orc = pd.DataFrame()
-        df_agrup = pd.DataFrame()
         
         target_orc_file = file_orc_up if file_orc_up is not None else (excel_orc_path if os.path.exists(excel_orc_path) else None)
         
         if target_orc_file is not None:
             try:
                 df_orc = pd.read_excel(target_orc_file, sheet_name="Oficina_ORÇAMENTO")
-                xl_orc = pd.ExcelFile(target_orc_file)
-                if "Agrupamento_facturacao" in xl_orc.sheet_names:
-                    df_agrup = pd.read_excel(target_orc_file, sheet_name="Agrupamento_facturacao")
-                elif "Agrupamento_oficinas" in xl_orc.sheet_names:
-                    df_agrup = pd.read_excel(target_orc_file, sheet_name="Agrupamento_oficinas")
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
@@ -545,15 +550,7 @@ else:
             col_valor_raw = df_fact_total.iloc[:, idx_val]
             df_fact_total["Valor_Num"] = col_valor_raw.apply(converter_valor_pt)
 
-            if not df_agrup.empty:
-                df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
-                col_agrup_oficina = df_agrup.columns[0]
-                col_agrup_destino = df_agrup.columns[3] if len(df_agrup.columns) > 3 else df_agrup.columns[1]
-                
-                dict_agrupamento = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip().str.upper(), df_agrup[col_agrup_destino].astype(str).str.strip()))
-                df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"].str.upper().map(dict_agrupamento).fillna(df_fact_total["Oficina_CSV"])
-            else:
-                df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
+            df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
 
             oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
             if not df_orc.empty:
@@ -561,6 +558,7 @@ else:
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
+            # Definir oficinas autorizadas com base no perfil e na coluna Agrupar / Agrupamento
             if st.session_state.acesso_total:
                 oficinas_autorizadas_lista = oficinas_disponiveis_fat
             else:
@@ -574,26 +572,25 @@ else:
 
             col_sel_cidade, col_sel_ofic = st.columns(2)
             
-            dict_cidade = {}
-            if not df_agrup.empty and len(df_agrup.columns) >= 3:
-                col_cidade_agrup = df_agrup.columns[2]
-                dict_cidade = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip().str.upper(), df_agrup[col_cidade_agrup].astype(str).str.strip()))
-            
-            cidades_autorizadas = sorted(list(set([dict_cidade.get(o.upper(), "Beja" if "BEJA" in o.upper() else ("Faro" if "FARO" in o.upper() else ("Évora" if "ÉVORA" in o.upper() or "EVORA" in o.upper() else ("Portimão" if "PORTIMÃO" in o.upper() or "PORTIMAO" in o.upper() else ("Setúbal" if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper() else "Geral"))))) for o in oficinas_autorizadas_lista])))
+            # Extrair cidades automaticamente com base nas oficinas autorizadas
+            cidades_autorizadas = sorted(list(set([
+                "Beja" if "BEJA" in o.upper() else 
+                ("Faro" if "FARO" in o.upper() else 
+                ("Évora" if "ÉVORA" in o.upper() or "EVORA" in o.upper() else 
+                ("Portimão" if "PORTIMÃO" in o.upper() or "PORTIMAO" in o.upper() else 
+                ("Setúbal" if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper() else 
+                ("Sines" if "SINES" in o.upper() else 
+                ("Almada" if "ALMADA" in o.upper() else 
+                ("Palmela" if "PALMELA" in o.upper() else 
+                ("Montijo" if "MONTIJO" in o.upper() else "Geral")))))))))
+                for o in oficinas_autorizadas_lista
+            ])))
 
             with col_sel_cidade:
                 cidade_selecionada = st.selectbox("Selecionar Cidade:", options=cidades_autorizadas)
 
             if cidade_selecionada != "Geral":
-                oficinas_filtradas_cidade = []
-                for o in oficinas_autorizadas_lista:
-                    c_oficina = dict_cidade.get(o.upper(), "").upper()
-                    if not c_oficina:
-                        if cidade_selecionada.upper() in o.upper():
-                            oficinas_filtradas_cidade.append(o)
-                    else:
-                        if cidade_selecionada.upper() in c_oficina:
-                            oficinas_filtradas_cidade.append(o)
+                oficinas_filtradas_cidade = [o for o in oficinas_autorizadas_lista if cidade_selecionada.upper() in o.upper()]
                 if not oficinas_filtradas_cidade:
                     oficinas_filtradas_cidade = oficinas_autorizadas_lista
             else:
@@ -606,7 +603,8 @@ else:
             
             df_oficina_fat = df_fact_total[
                 (df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean) |
-                (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean)
+                (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean) |
+                df_fact_total["Oficina_Agrupada"].apply(lambda x: sel_clean in limpar_str(x))
             ]
             
             df_mes_ano = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
@@ -686,12 +684,10 @@ else:
                                 
                     if mes_encontrado:
                         if st.session_state.acesso_total:
-                            # Restrição exata para Administradores para evitar somas globais erradas
                             if sel_clean == ofic_row:
                                 orc_encontrado = converter_valor_pt(row[col_val])
                                 break
                         else:
-                            # Verificação flexível para utilizadores restritos
                             if sel_clean == ofic_row or sel_clean in ofic_row or ofic_row in sel_clean:
                                 val_v = converter_valor_pt(row[col_val])
                                 if val_v > 0:
