@@ -590,7 +590,7 @@ else:
 
             df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"].apply(padronizar_oficina_fat)
 
-            oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
+            oficinas_disponiveis_fat = sorted(list(set([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])))
             if not df_orc.empty:
                 df_orc.columns = [str(c).strip() for c in df_orc.columns]
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
