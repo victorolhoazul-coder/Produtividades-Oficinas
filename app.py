@@ -228,7 +228,6 @@ def converter_valor_pt(val_str):
     s = str(val_str).replace("€", "").strip()
     if not s:
         return 0.0
-    # Se tiver formato PT com pontos de milhar e vírgula decimal
     if "," in s and "." in s:
         s = s.replace(".", "").replace(",", ".")
     elif "," in s:
@@ -656,7 +655,7 @@ else:
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Resumo de Faturação por Oficina (Direto da Coluna A)")
-        st.caption("Apresenta o valor total faturado acumulado por oficina exatamente como vem na Coluna A dos ficheiros CSV, com conversão correta do formato numérico português.")
+        st.caption("Apresenta o valor total faturado acumulado por oficina exatamente como vem na Coluna A dos ficheiros CSV, com conversão correta do formato numérico português e filtrado ao mês selecionado.")
         
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
         
@@ -694,18 +693,22 @@ else:
                                     partes = p
                                     break
                                     
-                            if len(partes) > 24:
+                            if len(partes) > 28:
                                 oficina_raw = partes[0]
-                                val_str = partes[24] # Índice 24 correto para a coluna Y de faturação
+                                val_str = partes[24]
+                                data_str = partes[28]
                                 
-                                valor = converter_valor_pt(val_str)
-                                if valor > 0 and oficina_raw.upper() not in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] and not oficina_raw.startswith("*"):
-                                    linhas_processadas.append({"Oficina": oficina_raw, "Total Faturado": valor})
+                                # Validar mês e ano
+                                data_dt = pd.to_datetime(data_str, dayfirst=True, errors="coerce")
+                                if pd.notna(data_dt) and data_dt.month == mes_selecionado and data_dt.year == ano_corrente:
+                                    valor = converter_valor_pt(val_str)
+                                    if valor > 0 and oficina_raw.upper() not in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] and not oficina_raw.startswith("*"):
+                                        linhas_processadas.append({"Oficina": oficina_raw, "Total Faturado": valor})
                     except Exception as e:
                         pass
                         
             if not linhas_processadas:
-                st.warning("⚠️ Não foram encontrados dados válidos. Verifique se os ficheiros CSV corretos foram carregados.")
+                st.warning("⚠️ Não foram encontrados dados válidos para o período selecionado. Verifique os ficheiros CSV e o mês.")
             else:
                 df_resumo = pd.DataFrame(linhas_processadas)
                 df_resumo = df_resumo.groupby("Oficina", as_index=False)["Total Faturado"].sum()
