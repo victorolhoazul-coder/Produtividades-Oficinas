@@ -657,7 +657,7 @@ else:
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Resumo de Faturação por Oficina (Direto dos CSVs)")
-        st.caption("Apresenta o valor total faturado acumulado por oficina, com base exclusivamente nos ficheiros CSV carregados.")
+        st.caption("Apresenta o valor total faturado acumulado por oficina, lendo diretamente o ficheiro CSV carregado.")
         
         df_teste = pd.DataFrame()
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
@@ -683,34 +683,40 @@ else:
                             file_bytes = file_f
 
                         file_bytes.seek(0)
-                        t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", skiprows=3, header=0, on_bad_lines='skip')
-                        if not t_temp.empty and len(t_temp.columns) > 1:
+                        # Lemos o CSV sem header pré-definido para inspecionar todas as colunas
+                        t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
+                        if not t_temp.empty:
                             df_teste = pd.concat([df_teste, t_temp], ignore_index=True)
                     except Exception as e:
                         pass
                         
             if df_teste.empty:
-                st.warning("⚠️ Os ficheiros CSV estão vazios ou o formato não foi reconhecido.")
+                st.warning("⚠️ Os ficheiros CSV carregados estão vazios.")
             else:
-                # Detetar automaticamente a coluna do nome da oficina e a coluna do valor
-                col_ofic_csv = df_teste.columns[0]
+                # Vamos procurar dinamicamente qual a coluna que contém os valores monetários/numéricos
+                # e qual contém o nome da oficina (normalmente coluna 0)
+                col_ofic = 0
                 
-                # Procurar uma coluna numérica ou a penúltima/última coluna para o valor
-                candidatos_valor = [c for c in df_teste.columns if any(term in str(c).upper() for term in ["VALOR", "TOTAL", "FACTURADO", "QUANTIA"])]
-                if candidatos_valor:
-                    col_val_csv = candidatos_valor[-1]
-                else:
-                    col_val_csv = df_teste.columns[24] if len(df_teste.columns) > 24 else df_teste.columns[-1]
+                # Testamos qual coluna tem valores numéricos maiores que zero (excluindo a coluna 0)
+                col_val = -1
+                for c in range(1, df_teste.shape[1]):
+                    s_test = pd.to_numeric(df_teste.iloc[:, c].astype(str).str.replace("€", "", regex=False).str.replace(".", "", regex=False).str.replace(",", ".", regex=False), errors="coerce")
+                    if s_test.sum() > 100:  # Se somar mais de 100 €, é claramente a coluna de valores!
+                        col_val = c
+                        break
+                
+                if col_val == -1:
+                    col_val = df_teste.shape[1] - 1  # Fallback para a última coluna
 
-                df_teste["Oficina"] = df_teste[col_ofic_csv].astype(str).str.strip()
+                df_teste["Oficina"] = df_teste.iloc[:, col_ofic].astype(str).str.strip()
                 
-                # Limpar linhas de cabeçalho e rodapé indesejadas
-                excluir = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "NAN", "ANO :"]
+                # Filtrar lixo, cabeçalhos e linhas vazias
+                excluir = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "NAN", "ANO :", "MÊS :"]
                 df_filtrado = df_teste[~df_teste["Oficina"].str.upper().apply(lambda x: any(ex in x for ex in excluir))]
                 df_filtrado = df_filtrado[~df_filtrado["Oficina"].str.startswith("*")]
                 df_filtrado = df_filtrado[df_filtrado["Oficina"].notna() & (df_filtrado["Oficina"] != "")]
 
-                col_valor_raw = df_filtrado[col_val_csv]
+                col_valor_raw = df_filtrado.iloc[:, col_val]
                 if col_valor_raw.dtype == object:
                     s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
                     s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
@@ -727,7 +733,7 @@ else:
                 linha_total_df = pd.DataFrame([{"Oficina": "TOTAL MOTORPOR", "Total Faturado": total_geral}])
                 df_resumo = pd.concat([df_resumo, linha_total_df], ignore_index=True)
                 
-                st.success("✅ Resumo gerado com sucesso!")
+                st.success("✅ Resumo gerado com sucesso com deteção automática de colunas!")
                 st.dataframe(
                     df_resumo.style.format({"Total Faturado": "{:,.2f} €"}),
                     use_container_width=True
