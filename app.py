@@ -63,7 +63,11 @@ if os.path.exists("perfis_utilizadores.xlsx"):
 st.sidebar.header("Navegação e Módulo")
 modulo_selecionado = st.sidebar.radio(
     "Escolha o Módulo:",
-    options=["📊 Produtividade de Oficinas", "💶 Faturação e Orçamento Diário"]
+    options=[
+        "📊 Produtividade de Oficinas", 
+        "💶 Faturação e Orçamento Diário",
+        "🧪 Teste Isolado Faturação (CSV)"
+    ]
 )
 
 st.sidebar.markdown("---")
@@ -438,7 +442,6 @@ else:
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
         
-        # 1. Carregamento de Orçamentos e Agrupamentos
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
@@ -452,10 +455,8 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura universal e blindada dos CSVs de Faturação
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
-        
         lista_streams = [f for f in csv_fontes if f is not None]
         
         if not lista_streams:
@@ -573,7 +574,6 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL DA OFICINA SELECIONADA
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
                 col_ofic_orc = df_orc.columns[0]
@@ -653,5 +653,80 @@ else:
             with col_kpi:
                 st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.0f} €".replace(",", " "))
                 st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
-                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
+                st.metric(label="FATURAÇÃOÀ DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
                 st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
+
+    elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
+        st.subheader("🧪 Laboratório de Testes - Leitura Direta de CSVs de Faturação")
+        st.caption("Este separador lê os dois ficheiros CSV de forma totalmente isolada, sem interferir com o resto da aplicação e sem agrupamentos.")
+        
+        df_teste = pd.DataFrame()
+        csv_fontes = [file_fact1_up, file_fact2_up]
+        lista_streams = [f for f in csv_fontes if f is not None]
+        
+        if not lista_streams:
+            arquivos_disco = glob.glob("*MOTOREX*.csv") + glob.glob("*MULTIAUTO*.csv") + glob.glob("*MAPA_FACTURAÇÃO*.csv") + glob.glob("*.csv")
+            lista_streams = list(dict.fromkeys(arquivos_disco))
+
+        for file_f in lista_streams:
+            try:
+                if hasattr(file_f, "getvalue"):
+                    file_bytes = io.BytesIO(file_f.getvalue())
+                elif isinstance(file_f, str):
+                    if os.path.exists(file_f):
+                        with open(file_f, "rb") as f_in:
+                            file_bytes = io.BytesIO(f_in.read())
+                    else:
+                        continue
+                else:
+                    file_bytes = file_f
+
+                for h_val in [5, 6, 4, 0]:
+                    try:
+                        file_bytes.seek(0)
+                        temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=h_val, on_bad_lines='skip')
+                        if not temp_df.empty and len(temp_df.columns) > 3:
+                            temp_df = temp_df.dropna(subset=[temp_df.columns[0]])
+                            df_teste = pd.concat([df_teste, temp_df], ignore_index=True)
+                            break
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        if df_teste.empty:
+            st.warning("⚠️ Nenhum ficheiro CSV de faturação detetado para teste.")
+        else:
+            df_teste.columns = [str(c).strip() for c in df_teste.columns]
+            
+            st.write(f"**Total de linhas brutas lidas:** {len(df_teste)}")
+            
+            # Mostra as colunas detetadas para podermos inspecionar
+            st.write("**Colunas disponíveis no CSV:**", list(df_teste.columns))
+            
+            col_ofic = next((c for c in df_teste.columns if any(k in c.upper() for k in ["OFICINA", "LOCAL", "ESCR", "ESTABELECIMENTO"])), df_teste.columns[0])
+            col_val = next((c for c in df_teste.columns if any(k in c.upper() for k in ["TOTAL", "LIQ", "VALOR", "IMPORT", "BRUTO"])), df_teste.columns[-1])
+            col_data = next((c for c in df_teste.columns if any(k in c.upper() for k in ["DATA", "EMISS", "DIA", "PERIODO"])), df_teste.columns[-2])
+
+            df_teste["Oficina_Raw"] = df_teste[col_ofic].astype(str).str.strip()
+            
+            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan", "SUBTOTAL", "OFICINA", "------------------------------------------------------------------------------------------------------------------------"]
+            df_teste = df_teste[~df_teste["Oficina_Raw"].str.upper().isin(invalidos)]
+            df_teste = df_teste[~df_teste["Oficina_Raw"].str.startswith("*")]
+            df_teste = df_teste[~df_teste["Oficina_Raw"].str.startswith("Ano")]
+
+            df_teste["Data_Teste"] = pd.to_datetime(df_teste[col_data], dayfirst=True, errors="coerce")
+            
+            s_clean = df_teste[col_val].astype(str).str.replace("€", "", regex=False).str.strip()
+            s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+            df_teste["Valor_Teste"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
+
+            # Tabela resumo por Oficina
+            df_resumo_oficina = df_teste.groupby("Oficina_Raw", as_index=False)["Valor_Teste"].sum()
+            df_resumo_oficina = df_resumo_oficina.sort_values(by="Valor_Teste", ascending=False)
+            
+            st.subheader("📊 Faturação Total Acumulada por Oficina (Sem Filtros / Sem Agrupamentos)")
+            st.dataframe(df_resumo_oficina.style.format({"Valor_Teste": "{:,.2f} €"}), use_container_width=True)
+            
+            st.subheader("🔍 Amostra das Primeiras Linhas Processadas")
+            st.dataframe(df_teste[[col_ofic, col_data, col_val, "Valor_Teste"]].head(15), use_container_width=True)
