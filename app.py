@@ -294,7 +294,7 @@ else:
                     if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper(): return o
             if "SINES" in nome_upper:
                 for o in oficinas_oficiais:
-                    if "SINES" in nome_upper: return o
+                    if "SINES" in o.upper(): return o
             return nome_str
 
         candidatos_op = ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico", "Mecanico"]
@@ -458,13 +458,6 @@ else:
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
-        if all(f is None for f in csv_fontes):
-            csv_fontes = glob.glob(f"*FACTURAÇÃO*{ano_corrente}_{mes_selecionado:02d}.csv")
-            if not csv_fontes:
-                csv_fontes = glob.glob("*FACTURAÇÃO*.csv")
-            if not csv_fontes:
-                csv_fontes = glob.glob("*.csv")
-                
         for file_f in csv_fontes:
             if file_f is not None:
                 try:
@@ -473,14 +466,11 @@ else:
                     elif hasattr(file_f, "read"):
                         file_f.seek(0)
                         file_bytes = io.BytesIO(file_f.read())
-                    elif isinstance(file_f, str):
-                        with open(file_f, "rb") as f_in:
-                            file_bytes = io.BytesIO(f_in.read())
                     else:
                         file_bytes = file_f
 
-                    t_temp = pd.DataFrame()
                     file_bytes.seek(0)
+                    t_temp = pd.DataFrame()
                     try:
                         t_temp = pd.read_csv(file_bytes, sep=';', engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
                         if len(t_temp.columns) <= 1:
@@ -495,9 +485,9 @@ else:
                     pass
                 
         if df_fact_total.empty:
-            st.warning("⚠️ Não foram encontrados mapas de faturação válidos ou os ficheiros estão vazios.")
+            st.warning("⚠️ Carregue os ficheiros CSV do Mapa de Faturação 1 e 2 na barra lateral.")
         else:
-            # Coluna A (Índice 0) = Oficina, Coluna Y (Índice 24) = Valor, Coluna AC (Índice 28) = Data
+            # Coluna A = índice 0 (Oficina), Coluna Y = índice 24 (Valor), Coluna AC = índice 28 (Data)
             idx_ofic = 0
             idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
@@ -664,10 +654,7 @@ else:
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
         
         if all(f is None for f in csv_fontes_teste):
-            csv_fontes_teste = glob.glob("*.csv")
-            
-        if not csv_fontes_teste or all(f is None for f in csv_fontes_teste):
-            st.warning("⚠️ Nenhum ficheiro CSV encontrado. Por favor, faça o upload dos ficheiros CSV na barra lateral (Mapa de Faturação 1 e 2).")
+            st.warning("⚠️ Por favor, faça o upload dos ficheiros CSV (Mapa de Faturação 1 e 2) na barra lateral esquerda.")
         else:
             df_teste = pd.DataFrame()
             
@@ -679,9 +666,6 @@ else:
                         elif hasattr(file_f, "read"):
                             file_f.seek(0)
                             file_bytes = io.BytesIO(file_f.read())
-                        elif isinstance(file_f, str):
-                            with open(file_f, "rb") as f_in:
-                                file_bytes = io.BytesIO(f_in.read())
                         else:
                             file_bytes = file_f
 
@@ -701,15 +685,15 @@ else:
                         pass
                         
             if df_teste.empty:
-                st.warning("⚠️ Os ficheiros CSV estão vazios ou o formato não foi reconhecido.")
+                st.warning("⚠️ Os ficheiros carregados estão vazios ou o formato não foi reconhecido.")
             else:
-                # Coluna A = índice 0 (Oficina), Coluna Y = índice 24 (Valor), Coluna AC = índice 28 (Data)
+                # Coluna A = índice 0 (Oficina), Coluna Y = índice 24 (Valor)
                 idx_ofic = 0
                 idx_val = 24 if df_teste.shape[1] > 24 else df_teste.shape[1] - 1
 
                 df_teste["Oficina"] = df_teste.iloc[:, idx_ofic].astype(str).str.strip()
                 
-                # Filtrar cabeçalhos, rodapés, linhas vazias e asteriscos
+                # Filtrar cabeçalhos, rodapés e linhas vazias
                 invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"]
                 df_filtrado = df_teste[~df_teste["Oficina"].str.upper().apply(lambda x: any(inv in x for inv in invalidos))]
                 df_filtrado = df_filtrado[~df_filtrado["Oficina"].str.startswith("*")]
