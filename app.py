@@ -482,9 +482,14 @@ else:
                     t_temp = pd.DataFrame()
                     file_bytes.seek(0)
                     try:
-                        temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", skiprows=3, on_bad_lines='skip', header=0)
+                        temp_df = pd.read_csv(file_bytes, sep=';', engine="python", encoding="iso-8859-1", skiprows=3, on_bad_lines='skip', header=0)
                         if len(temp_df.columns) > 1:
                             t_temp = temp_df
+                        else:
+                            file_bytes.seek(0)
+                            temp_df = pd.read_csv(file_bytes, sep=',', engine="python", encoding="iso-8859-1", skiprows=3, on_bad_lines='skip', header=0)
+                            if len(temp_df.columns) > 1:
+                                t_temp = temp_df
                     except Exception as ex_read:
                         st.warning(f"Aviso de leitura CSV: {ex_read}")
                     
@@ -657,7 +662,7 @@ else:
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Resumo de Faturação por Oficina (Direto dos CSVs)")
-        st.caption("Apresenta o valor total faturado acumulado por oficina, lendo diretamente a coluna 0 (oficina) e a coluna 24 (valor).")
+        st.caption("Apresenta o valor total faturado acumulado por oficina, utilizando a leitura otimizada por ponto e vírgula.")
         
         df_teste = pd.DataFrame()
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
@@ -674,7 +679,6 @@ else:
                         if hasattr(file_f, "getvalue"):
                             file_bytes = io.BytesIO(file_f.getvalue())
                         elif hasattr(file_f, "read"):
-                            file_f.seek(0)
                             file_bytes = io.BytesIO(file_f.read())
                         elif isinstance(file_f, str):
                             with open(file_f, "rb") as f_in:
@@ -683,8 +687,12 @@ else:
                             file_bytes = file_f
 
                         file_bytes.seek(0)
-                        # Leitura exata com skiprows=3 para alinhar com a estrutura dos relatórios de faturação
-                        t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", skiprows=3, header=0, on_bad_lines='skip')
+                        # Tentativa com separador ponto e vírgula (;)
+                        t_temp = pd.read_csv(file_bytes, sep=';', engine="python", encoding="iso-8859-1", skiprows=3, header=0, on_bad_lines='skip')
+                        if t_temp.empty or len(t_temp.columns) <= 1:
+                            file_bytes.seek(0)
+                            t_temp = pd.read_csv(file_bytes, sep=',', engine="python", encoding="iso-8859-1", skiprows=3, header=0, on_bad_lines='skip')
+                            
                         if not t_temp.empty and len(t_temp.columns) > 1:
                             df_teste = pd.concat([df_teste, t_temp], ignore_index=True)
                     except Exception as e:
@@ -693,39 +701,66 @@ else:
             if df_teste.empty:
                 st.warning("⚠️ Os ficheiros CSV estão vazios ou o formato não foi reconhecido.")
             else:
-                # Índices exatos indicados: Coluna 0 para a Oficina e Coluna 24 para o Valor
-                idx_ofic = 0
-                idx_val = 24 if df_teste.shape[1] > 24 else df_teste.shape[1] - 1
-
-                df_teste["Oficina"] = df_teste.iloc[:, idx_ofic].astype(str).str.strip()
+                # Motor inteligente de extração de colunas por varredura
+                # Procura em cada linha qual é o texto da oficina e qual é a coluna com o valor numérico
+                linhas_processadas = []
                 
-                # Filtrar cabeçalhos, rodapés e linhas inválidas
-                invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "NAN", "ANO :", "MÊS :"]
-                df_filtrado = df_teste[~df_teste["Oficina"].str.upper().apply(lambda x: any(inv in x for inv in invalidos))]
-                df_filtrado = df_filtrado[~df_filtrado["Oficina"].str.startswith("*")]
-                df_filtrado = df_filtrado[df_filtrado["Oficina"].notna() & (df_filtrado["Oficina"] != "")]
-
-                col_valor_raw = df_filtrado.iloc[:, idx_val]
-                if col_valor_raw.dtype == object:
-                    s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
-                    s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-                    df_filtrado["Valor"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
-                else:
-                    df_filtrado["Valor"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
+                for _, row in df_teste.iterrows():
+                    oficina_str = ""
+                    valor_num = 0.0
                     
-                # Agrupamento por oficina idêntico à imagem de referência
-                df_resumo = df_filtrado.groupby("Oficina", as_index=False)["Valor"].sum()
-                df_resumo = df_resumo[df_resumo["Valor"] > 0]
-                df_resumo.rename(columns={"Oficina": "Oficina", "Valor": "Total Faturado"}, inplace=True)
-                df_resumo = df_resumo.sort_values(by="Total Faturado", ascending=False)
+                    for val in row:
+                        val_str = str(val).strip()
+                        val_upper = val_str.upper()
+                        
+                        # Detetar se é um nome de oficina válido
+                        if any(k in val_upper for k in ["MECÂNICA", "OF.", "COLISÃO", "OFICINA", "ELVAS", "PORTIMÃO", "BEJA", "ÉVORA", "FARO", "SETÚBAL", "SINES", "MONTIJO", "ALMADA", "PALMELA"]):
+                            if not any(lixo in val_upper for lixo in ["MAPA", "TOTAL", "ANO", "MÊS", "NONE", "NAN"]):
+                                oficina_str = val_str
+                        
+                        # Detetar o valor numérico (convertendo formato monetário português)
+                        cleaned = val_str.replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+                        try:
+                            num = float(cleaned)
+                            if num > 0 and len(val_str.replace("€", "").strip()) > 0:
+                                # Garantir que não estamos a apanhar um ano ou índice de coluna
+                                if num > 10 and not (1900 <= num <= 2100 and num == int(num)):
+                                    valor_num = num
+                        except:
+                            pass
+                            
+                    if oficina_str and valor_num > 0:
+                        linhas_processadas.append({"Oficina": oficina_str, "Total Faturado": valor_num})
                 
-                # Adicionar linha TOTAL MOTORPOR no fim
-                total_geral = df_resumo["Total Faturado"].sum()
-                linha_total_df = pd.DataFrame([{"Oficina": "TOTAL MOTORPOR", "Total Faturado": total_geral}])
-                df_resumo = pd.concat([df_resumo, linha_total_df], ignore_index=True)
-                
-                st.success("✅ Resumo gerado com sucesso!")
-                st.dataframe(
-                    df_resumo.style.format({"Total Faturado": "{:,.2f} €"}),
-                    use_container_width=True
-                )
+                if not linhas_processadas:
+                    # Fallback por índices fixos (coluna 0 e coluna 24) caso a varredura inteligente encontre restrições
+                    idx_ofic = 0
+                    idx_val = 24 if df_teste.shape[1] > 24 else df_teste.shape[1] - 1
+                    
+                    for _, row in df_teste.iterrows():
+                        ofic = str(row.iloc[idx_ofic]).strip()
+                        if ofic and ofic.upper() not in ["NAN", "NONE", "TOTAL", "MAPA DE FACTURAÇÃO"] and not ofic.startswith("*"):
+                            val_raw = str(row.iloc[idx_val]).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+                            try:
+                                val = float(val_raw)
+                                if val > 0:
+                                    linhas_processadas.append({"Oficina": ofic, "Total Faturado": val})
+                            except:
+                                pass
+
+                df_resumo = pd.DataFrame(linhas_processadas)
+                if not df_resumo.empty:
+                    df_resumo = df_resumo.groupby("Oficina", as_index=False)["Total Faturado"].sum()
+                    df_resumo = df_resumo.sort_values(by="Total Faturado", ascending=False)
+                    
+                    total_geral = df_resumo["Total Faturado"].sum()
+                    linha_total_df = pd.DataFrame([{"Oficina": "TOTAL MOTORPOR", "Total Faturado": total_geral}])
+                    df_resumo = pd.concat([df_resumo, linha_total_df], ignore_index=True)
+                    
+                    st.success("✅ Resumo gerado com sucesso!")
+                    st.dataframe(
+                        df_resumo.style.format({"Total Faturado": "{:,.2f} €"}),
+                        use_container_width=True
+                    )
+                else:
+                    st.warning("⚠️ Não foram encontrados dados válidos de oficinas nas linhas do CSV.")
