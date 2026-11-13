@@ -614,46 +614,41 @@ else:
                 col_val = df_orc.columns[4]
                 
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
+                exclusoes = ["TOTAL", "GRUPO", "MAPA", "ACUMULADO", "GERAL", "RESUMO", "TODAS"]
                 
-                cidades_keywords = ["BEJA", "EVORA", "ÉVORA", "FARO", "SETUBAL", "SETÚBAL", "PORTIMAO", "PORTIMÃO", "SINES", "ALMADA"]
-                cidade_alvo = next((c for c in cidades_keywords if c in sel_clean), "")
-                
+                orc_encontrado = 0.0
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
                     
-                    if not ofic_row or "TOTAL" in ofic_row or "GRUPO" in ofic_row or "MAPA" in ofic_row:
+                    if not ofic_row or any(exc in ofic_row for exc in exclusoes):
                         continue
-                    
-                    match_orc = False
-                    if cidade_alvo and cidade_alvo in ofic_row.split():
-                        match_orc = True
-                    elif sel_clean == ofic_row:
-                        match_orc = True
                         
-                    if match_orc:
-                        val_mes_cell = row[col_mes]
-                        mes_encontrado = False
-                        
-                        if isinstance(val_mes_cell, (pd.Timestamp, datetime, date)):
-                            if val_mes_cell.month == mes_selecionado:
-                                mes_encontrado = True
+                    val_mes_cell = row[col_mes]
+                    mes_encontrado = False
+                    if isinstance(val_mes_cell, (pd.Timestamp, datetime, date)):
+                        if val_mes_cell.month == mes_selecionado:
+                            mes_encontrado = True
+                    else:
+                        mes_row_str = limpar_str(val_mes_cell)
+                        if nome_mes_alvo in mes_row_str or mes_row_str in nome_mes_alvo:
+                            mes_encontrado = True
                         else:
-                            mes_row_str = limpar_str(val_mes_cell)
-                            if nome_mes_alvo in mes_row_str or mes_row_str in nome_mes_alvo:
-                                mes_encontrado = True
-                            else:
-                                try:
-                                    if int(val_mes_cell) == mes_selecionado:
-                                        mes_encontrado = True
-                                except:
-                                    pass
-                        
-                        if mes_encontrado:
-                            val_raw = row[col_val]
-                            orc_val = converter_valor_pt(val_raw)
-                            if orc_val > 0:
-                                orcamento_mensal = orc_val
-                                break
+                            try:
+                                if int(val_mes_cell) == mes_selecionado:
+                                    mes_encontrado = True
+                            except:
+                                pass
+                                
+                    if mes_encontrado:
+                        if sel_clean == ofic_row:
+                            orc_encontrado = converter_valor_pt(row[col_val])
+                            break
+                        elif sel_clean in ofic_row or ofic_row in sel_clean:
+                            val_v = converter_valor_pt(row[col_val])
+                            if val_v > 0 and val_v < 200000:
+                                orc_encontrado = val_v
+                                
+                orcamento_mensal = orc_encontrado
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
