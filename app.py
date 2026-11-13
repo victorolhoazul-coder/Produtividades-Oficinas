@@ -222,7 +222,6 @@ nome_arq_aus = f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx
 path_ausencias = nome_arq_aus if os.path.exists(nome_arq_aus) else None
 
 def converter_valor_pt(val_str):
-    """Trata corretamente o formato português (ex: 9.966,27 -> remove ponto de milhar e troca vírgula por ponto)."""
     if pd.isna(val_str):
         return 0.0
     s = str(val_str).replace("€", "").strip()
@@ -577,8 +576,20 @@ else:
             range_dias = pd.date_range(start=inicio_mes, end=fim_mes)
             df_completo_dias = pd.DataFrame({"Data": range_dias.date})
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
+            
+            # Ajuste para cortar o acumulado e barras apenas até ao dia útil decorrido / hoje no mês atual
+            hoje_atual = datetime.now().date()
+            if ano_corrente == hoje_atual.year and mes_selecionado == hoje_atual.month:
+                data_limite_grafico = hoje_atual
+            else:
+                data_limite_grafico = fim_mes
+
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
+            # Zerar valores futuros para o gráfico não mostrar barras a direito até ao fim do mês
+            df_completo_dias.loc[df_completo_dias["Data"] > data_limite_grafico, "Facturacao_Acumulada"] = None
+            df_completo_dias.loc[df_completo_dias["Data"] > data_limite_grafico, "Facturacao_Diaria"] = None
+
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
                 col_ofic = df_orc.columns[0]
@@ -624,7 +635,9 @@ else:
                 orcamentos_ac.append(acum)
             df_completo_dias["Orcamento_Acumulado"] = orcamentos_ac
             
-            facturacao_a_data = df_completo_dias["Facturacao_Acumulada"].iloc[-1] if not df_completo_dias.empty else 0.0
+            # Faturação à data real válida
+            val_fat_reais = df_diario[df_diario["Data"] <= data_limite_grafico]["Facturacao_Diaria"]
+            facturacao_a_data = val_fat_reais.sum() if not val_fat_reais.empty else 0.0
             desvio_orcamento = facturacao_a_data - orcamento_mensal
             
             col_graf, col_kpi = st.columns([3, 1])
@@ -636,15 +649,22 @@ else:
                 
                 barras = base.mark_bar(color='#115e59').encode(
                     y=alt.Y('Facturacao_Acumulada:Q', title='Valor (€)'),
-                    tooltip=['Data', 'Facturacao_Diaria', 'Facturacao_Acumulada']
+                    tooltip=[
+                        alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
+                        alt.Tooltip('Facturacao_Diaria:Q', title='Faturação Diária', format=',.2f'),
+                        alt.Tooltip('Facturacao_Acumulada:Q', title='Faturação Acumulada', format=',.2f')
+                    ]
                 )
                 
                 linha_orc = base.mark_line(color='#f97316', strokeWidth=3).encode(
-                    y='Orcamento_Acumulado:Q',
-                    tooltip=['Data', 'Orcamento_Acumulado']
+                    y=alt.Y('Orcamento_Acumulado:Q', title='Orçamento Acumulado'),
+                    tooltip=[
+                        alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
+                        alt.Tooltip('Orcamento_Acumulado:Q', title='Orçamento Acumulado', format=',.2f')
+                    ]
                 )
                 
-                chart = (barras + linha_orc).properties(height=400).interactive()
+                chart = (barras + linha_orc).properties(height=420).interactive()
                 st.altair_chart(chart, use_container_width=True)
                 
             with col_kpi:
@@ -698,7 +718,6 @@ else:
                                 val_str = partes[24]     # Coluna Y (Total Liqu)
                                 data_str = partes[28]    # Coluna AC (Data Factura)
                                 
-                                # Filtrar rigorosamente pelo mês e ano selecionados através da coluna AC
                                 data_dt = pd.to_datetime(data_str, dayfirst=True, errors="coerce")
                                 if pd.notna(data_dt) and data_dt.month == mes_selecionado and data_dt.year == ano_corrente:
                                     valor = converter_valor_pt(val_str)
