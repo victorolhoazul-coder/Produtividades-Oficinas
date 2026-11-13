@@ -438,7 +438,7 @@ else:
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
         
-        # 1. Carregamento de Orçamentos
+        # 1. Carregamento de Orçamentos e Agrupamentos
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
@@ -452,12 +452,12 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura robusta e universal de Faturação (Trata uploads do Streamlit e ficheiros locais do disco)
+        # 2. Leitura universal e limpa dos ficheiros CSV de faturação
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
         if all(f is None for f in csv_fontes):
-            csv_fontes = glob.glob("*MOTOREX*.csv") + glob.glob("*MULTIAUTO*.csv") + glob.glob("*FACTURAÇÃO*.csv") + glob.glob("*.csv")
+            csv_fontes = glob.glob("*MOTOREX*.csv") + glob.glob("*MULTIAUTO*.csv") + glob.glob("*MAPA_FACTURAÇÃO*.csv") + glob.glob("*.csv")
             csv_fontes = list(dict.fromkeys(csv_fontes))
                 
         for file_f in csv_fontes:
@@ -520,7 +520,7 @@ else:
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
 
-            # 3. Mapeamento direto com base na tabela Agrupamento_oficinas
+            # 3. Mapeamento rigoroso baseado na tabela Agrupamento_oficinas
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
@@ -544,10 +544,29 @@ else:
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
                 
-            # Filtro exato e direto pela oficina selecionada
-            df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"] == oficina_selecionada_fat]
+            def limpar_str(s):
+                if pd.isna(s): return ""
+                s_nfkd = unicodedata.normalize('NFKD', str(s))
+                return "".join([c for c in s_nfkd if not unicodedata.combining(c)]).upper().strip()
+
+            sel_clean = limpar_str(oficina_selecionada_fat)
+            
+            # Filtro exato por oficina selecionada
+            mask_oficina = (
+                df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean
+            ) | (
+                df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean
+            )
+            
+            df_oficina_fat = df_fact_total[mask_oficina]
             if df_oficina_fat.empty:
-                df_oficina_fat = df_fact_total[df_fact_total["Oficina_CSV"] == oficina_selecionada_fat]
+                # Fallback para correspondência parcial se o nome diferir ligeiramente
+                mask_parcial = (
+                    df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False) |
+                    df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)
+                )
+                df_oficina_fat = df_fact_total[mask_parcial]
+            
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total
             
@@ -571,20 +590,14 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL
+            # 4. ORÇAMENTO MENSAL ESPECÍFICO DA OFICINA SELECIONADA
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
                 col_ofic_orc = df_orc.columns[0]
                 col_mes_orc = df_orc.columns[3]
                 col_val_orc = df_orc.columns[4]
                 
-                def limpar_str(s):
-                    if pd.isna(s): return ""
-                    s_nfkd = unicodedata.normalize('NFKD', str(s))
-                    return "".join([c for c in s_nfkd if not unicodedata.combining(c)]).upper().strip()
-
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
-                sel_clean = limpar_str(oficina_selecionada_fat)
                 
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic_orc])
