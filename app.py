@@ -96,14 +96,7 @@ if st.sidebar.button("Atualizar / Limpar Cache"):
 ultima_atualizacao = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 st.sidebar.caption(f"🔄 Última atualização: {ultima_atualizacao}")
 
-def calcular_dias_uteis_mes(ano, mes, cidade="Nacional (Sem Municipal)"):
-    if mes == 12:
-        proximo_mes = date(ano + 1, 1, 1)
-    else:
-        proximo_mes = date(ano, mes + 1, 1)
-    inicio = date(ano, mes, 1)
-    fim = proximo_mes - timedelta(days=1)
-    
+def obter_feriados_mes(ano, mes, cidade="Nacional (Sem Municipal)"):
     feriados = [
         date(ano, 1, 1), date(ano, 4, 25), date(ano, 5, 1),   
         date(ano, 6, 10), date(ano, 8, 15), date(ano, 10, 5),  
@@ -118,7 +111,17 @@ def calcular_dias_uteis_mes(ano, mes, cidade="Nacional (Sem Municipal)"):
     elif "PORTIMÃO" in cidade_upper or "PORTIMAO" in cidade_upper: feriados.append(date(ano, 12, 19))   
     elif "FARO" in cidade_upper: feriados.append(date(ano, 9, 7))     
     elif "SETÚBAL" in cidade_upper or "SETUBAL" in cidade_upper: feriados.append(date(ano, 9, 15))    
-    elif "SINES" in cidade_upper: feriados.append(date(ano, 11, 24))   
+    elif "SINES" in cidade_upper: feriados.append(date(ano, 11, 24))
+    return feriados
+
+def calcular_dias_uteis_mes(ano, mes, cidade="Nacional (Sem Municipal)"):
+    if mes == 12:
+        proximo_mes = date(ano + 1, 1, 1)
+    else:
+        proximo_mes = date(ano, mes + 1, 1)
+    inicio = date(ano, mes, 1)
+    fim = proximo_mes - timedelta(days=1)
+    feriados = obter_feriados_mes(ano, mes, cidade)
         
     dias_uteis = 0
     atual = inicio
@@ -479,7 +482,7 @@ else:
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
                     elif hasattr(file_f, "read"):
-                        file_bytes = io.BytesIO(file_f.read())
+                        file_bytes = file_f.read()
                     else:
                         file_bytes = file_f
 
@@ -567,17 +570,26 @@ else:
             df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
             df_diario = df_diario.dropna(subset=["Data"]).sort_values("Data")
             
+            # Gerar APENAS DIAS ÚTEIS do mês (removendo fins de semana e feriados)
             inicio_mes = date(ano_corrente, mes_selecionado, 1)
             if mes_selecionado == 12:
                 fim_mes = date(ano_corrente + 1, 1, 1) - timedelta(days=1)
             else:
                 fim_mes = date(ano_corrente, mes_selecionado + 1, 1) - timedelta(days=1)
                 
-            range_dias = pd.date_range(start=inicio_mes, end=fim_mes)
-            df_completo_dias = pd.DataFrame({"Data": range_dias.date})
+            feriados_mes = obter_feriados_mes(ano_corrente, mes_selecionado, cidade_feriado)
+            
+            dias_uteis_lista = []
+            atual = inicio_mes
+            while atual <= fim_mes:
+                if atual.weekday() < 5 and atual not in feriados_mes:
+                    dias_uteis_lista.append(atual)
+                atual += timedelta(days=1)
+                
+            df_completo_dias = pd.DataFrame({"Data": dias_uteis_lista})
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             
-            # Ajuste para cortar o acumulado e barras apenas até ao dia útil decorrido / hoje no mês atual
+            # Limite atual do gráfico (hoje ou fim do mês)
             hoje_atual = datetime.now().date()
             if ano_corrente == hoje_atual.year and mes_selecionado == hoje_atual.month:
                 data_limite_grafico = hoje_atual
@@ -586,7 +598,7 @@ else:
 
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # Zerar valores futuros para o gráfico não mostrar barras a direito até ao fim do mês
+            # Cortar dados futuros
             df_completo_dias.loc[df_completo_dias["Data"] > data_limite_grafico, "Facturacao_Acumulada"] = None
             df_completo_dias.loc[df_completo_dias["Data"] > data_limite_grafico, "Facturacao_Diaria"] = None
 
@@ -627,18 +639,26 @@ else:
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
+            # Orçamento acumulado linear por dia útil (crescimento reto)
             orcamentos_ac = []
             acum = 0.0
             for d in df_completo_dias["Data"]:
-                if d.weekday() < 5:
+                if d <= data_limite_grafico:
                     acum += orcamento_diario
-                orcamentos_ac.append(acum)
+                    orcamentos_ac.append(acum)
+                else:
+                    acum += orcamento_diario
+                    orcamentos_ac.append(None) # Cortar linha de orçamento no dia atual
             df_completo_dias["Orcamento_Acumulado"] = orcamentos_ac
             
-            # Faturação à data real válida
+            # Faturação à data e Orçamento à data para cálculo correto do desvio
             val_fat_reais = df_diario[df_diario["Data"] <= data_limite_grafico]["Facturacao_Diaria"]
             facturacao_a_data = val_fat_reais.sum() if not val_fat_reais.empty else 0.0
-            desvio_orcamento = facturacao_a_data - orcamento_mensal
+            
+            orcamento_a_data_list = df_completo_dias[df_completo_dias["Data"] <= data_limite_grafico]["Orcamento_Acumulado"]
+            orcamento_a_data = orcamento_a_data_list.iloc[-1] if not orcamento_a_data_list.empty else 0.0
+            
+            desvio_orcamento = facturacao_a_data - orcamento_a_data
             
             col_graf, col_kpi = st.columns([3, 1])
             
