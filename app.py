@@ -702,10 +702,8 @@ else:
                 pass
 
         if df_teste.empty:
-            st.warning("⚠️ Nenhum ficheiro CSV de faturação detetado para teste.")
+            st.warning("⚠️ Nenhum ficheiro CSV de faturação detetado para teste. Por favor, faça o upload dos ficheiros na barra lateral.")
         else:
-            st.write(f"**Total de linhas brutas lidas:** {len(df_teste)}")
-            
             df_teste["Oficina_Raw"] = df_teste[0].astype(str).str.strip()
             
             invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan", "SUBTOTAL", "OFICINA"]
