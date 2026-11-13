@@ -249,14 +249,12 @@ def oficina_permitida_check(oficina_nome):
     oficina_up = limpar_str(oficina_nome)
     for permitida in st.session_state.oficinas_autorizadas:
         p_clean = limpar_str(permitida)
-        # Identificar cidade principal para associar corretamente (ex: "Beja" casa com "Colisão Beja" ou "Mecânica Beja")
+        # Extrair a cidade chave (ex: BEJA, FARO, EVORA) para comparar com segurança
         cidades = ["BEJA", "EVORA", "ÉVORA", "FARO", "SETUBAL", "SETÚBAL", "PORTIMAO", "PORTIMÃO", "SINES", "ALMADA"]
-        cidade_encontrada = next((c for c in cidades if c in p_clean or c in oficina_up), None)
+        cidade_p = next((c for c in cidades if c in p_clean), p_clean)
+        cidade_o = next((c for c in cidades if c in oficina_up), oficina_up)
         
-        if cidade_encontrada:
-            if cidade_encontrada in oficina_up and cidade_encontrada in p_clean:
-                return True
-        elif p_clean in oficina_up or oficina_up in p_clean:
+        if cidade_p == cidade_o or p_clean in oficina_up or oficina_up in p_clean:
             return True
     return False
 
@@ -618,20 +616,19 @@ else:
                 
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
                 
-                # Extrair cidade principal para mapear com segurança o orçamento (ex: "Beja" liga "Colisão Beja" a "Mecânica Beja")
+                # Extrair a cidade exata para correspondência unívoca
                 cidades_keywords = ["BEJA", "EVORA", "ÉVORA", "FARO", "SETUBAL", "SETÚBAL", "PORTIMAO", "PORTIMÃO", "SINES", "ALMADA"]
-                cidade_selecionada_key = next((c for c in cidades_keywords if c in sel_clean), sel_clean)
+                cidade_alvo = next((c for c in cidades_keywords if c in sel_clean), sel_clean)
                 
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
                     
-                    match_orc = False
-                    if cidade_selecionada_key in ofic_row:
-                        match_orc = True
-                    elif sel_clean in ofic_row or ofic_row in sel_clean:
-                        match_orc = True
-                        
-                    if match_orc:
+                    # Evitar linhas resumo / totais gerais
+                    if "TOTAL" in ofic_row or "GRUPO" in ofic_row or "MAPA" in ofic_row:
+                        continue
+                    
+                    # Correspondência rigorosa por cidade ou nome exato da oficina
+                    if cidade_alvo in ofic_row or sel_clean == ofic_row:
                         val_mes_cell = row[col_mes]
                         mes_encontrado = False
                         
@@ -671,7 +668,7 @@ else:
             dias_uteis_decorridos_reais = len(df_completo_dias[df_completo_dias["Data"] <= data_limite_grafico])
             orcamento_a_data = dias_uteis_decorridos_reais * orcamento_diario
             
-            desvio_orcamento = facturacao_a_data - orcamento_a_data
+            desvio_orcamento = facturacao_a_data - orçamento_a_data if 'orçamento_a_data' in locals() else facturacao_a_data - orcamento_a_data
             
             col_graf, col_kpi = st.columns([3, 1])
             
