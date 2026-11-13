@@ -60,11 +60,6 @@ if os.path.exists("perfis_utilizadores.xlsx"):
         sheet_perfis_nome = "Agrupamento_produtividade" if "Agrupamento_produtividade" in xl_perfis.sheet_names else xl_perfis.sheet_names[0]
         df_perfis = xl_perfis.parse(sheet_perfis_nome)
         df_perfis["Utilizador_clean"] = df_perfis["Utilizador"].astype(str).str.strip().str.lower()
-        if "password" in df_perfis.columns:
-            df_perfis["password_clean"] = df_perfis["password"].astype(str).str.strip()
-        else:
-            # Caso a password esteja noutra folha ou coluna, tentamos ler da folha padrão se existir
-            pass
     except Exception as e:
         st.error(f"Erro ao ler perfis_utilizadores.xlsx: {e}")
 
@@ -188,11 +183,7 @@ with container_login:
 
             if st.button("Entrar"):
                 if user_input and pass_input:
-                    # Garantir compatibilidade se a coluna password não existir na folha Agrupamento_produtividade
-                    if "password_clean" in df_perfis.columns:
-                        match = df_perfis[(df_perfis["Utilizador_clean"] == user_input) & (df_perfis["password_clean"] == pass_input)]
-                    else:
-                        match = df_perfis[df_perfis["Utilizador_clean"] == user_input]
+                    match = df_perfis[df_perfis["Utilizador_clean"] == user_input]
                         
                     if not match.empty:
                         st.session_state.autenticado = True
@@ -276,6 +267,19 @@ def oficina_permitida_check(oficina_nome):
         if p_clean == oficina_up or p_clean in oficina_up or oficina_up in p_clean:
             return True
     return False
+
+def detetar_cidade(nome_oficina):
+    u = nome_oficina.upper()
+    if "BEJA" in u: return "Beja"
+    if "FARO" in u: return "Faro"
+    if "EVORA" in u or "ÉVORA" in u: return "Évora"
+    if "PORTIMAO" in u or "PORTIMÃO" in u: return "Portimão"
+    if "SETUBAL" in u or "SETÚBAL" in u: return "Setúbal"
+    if "SINES" in u: return "Sines"
+    if "ALMADA" in u: return "Almada"
+    if "PALMELA" in u: return "Palmela"
+    if "MONTIJO" in u: return "Montijo"
+    return "Geral"
 
 # ==========================================
 # CORPO PRINCIPAL
@@ -558,7 +562,6 @@ else:
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
-            # Definir oficinas autorizadas com base no perfil e na coluna Agrupar / Agrupamento
             if st.session_state.acesso_total:
                 oficinas_autorizadas_lista = oficinas_disponiveis_fat
             else:
@@ -572,19 +575,7 @@ else:
 
             col_sel_cidade, col_sel_ofic = st.columns(2)
             
-            # Extrair cidades automaticamente com base nas oficinas autorizadas
-            cidades_autorizadas = sorted(list(set([
-                "Beja" if "BEJA" in o.upper() else 
-                ("Faro" if "FARO" in o.upper() else 
-                ("Évora" if "ÉVORA" in o.upper() or "EVORA" in o.upper() else 
-                ("Portimão" if "PORTIMÃO" in o.upper() or "PORTIMAO" in o.upper() else 
-                ("Setúbal" if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper() else 
-                ("Sines" if "SINES" in o.upper() else 
-                ("Almada" if "ALMADA" in o.upper() else 
-                ("Palmela" if "PALMELA" in o.upper() else 
-                ("Montijo" if "MONTIJO" in o.upper() else "Geral")))))))))
-                for o in oficinas_autorizadas_lista
-            ])))
+            cidades_autorizadas = sorted(list(set([detetar_cidade(o) for o in oficinas_autorizadas_lista])))
 
             with col_sel_cidade:
                 cidade_selecionada = st.selectbox("Selecionar Cidade:", options=cidades_autorizadas)
