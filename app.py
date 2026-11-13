@@ -517,7 +517,7 @@ else:
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
-                col_agrup_destino = df_agrup.columns[3] if len(df_agrup.columns) > 3 else df_agrup.columns[1]
+                col_agrup_destino = df_agrup.columns[1] if len(df_agrup.columns) > 1 else df_agrup.columns[0]
                 
                 dict_agrupamento = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip().str.upper(), df_agrup[col_agrup_destino].astype(str).str.strip()))
                 df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"].str.upper().map(dict_agrupamento).fillna(df_fact_total["Oficina_CSV"])
@@ -659,7 +659,7 @@ else:
         if all(f is None for f in csv_fontes_teste):
             st.warning("⚠️ Por favor, faça o upload dos ficheiros CSV (Mapa de Faturação 1 e 2) na barra lateral esquerda.")
         else:
-            # Carregar o dicionário exato de agrupamentos (Coluna 0 = marca/origem, Coluna 3 = destino)
+            # Carregar o dicionário exato de agrupamentos (Coluna 0 = marca original, Coluna 1 = oficina agrupada principal)
             excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
             target_orc_file = file_orc_up if file_orc_up is not None else (excel_orc_path if os.path.exists(excel_orc_path) else None)
             dict_agrupamento = {}
@@ -668,9 +668,9 @@ else:
                 try:
                     df_agrup_test = pd.read_excel(target_orc_file, sheet_name="Agrupamento_oficinas")
                     df_agrup_test.columns = [str(c).strip() for c in df_agrup_test.columns]
-                    if len(df_agrup_test.columns) >= 4:
+                    if len(df_agrup_test.columns) >= 2:
                         col_origem = df_agrup_test.columns[0]
-                        col_destino = df_agrup_test.columns[3]
+                        col_destino = df_agrup_test.columns[1]
                         for _, r in df_agrup_test.iterrows():
                             orig = str(r[col_origem]).strip()
                             dest = str(r[col_destino]).strip()
