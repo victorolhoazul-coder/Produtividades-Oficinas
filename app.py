@@ -452,19 +452,17 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura universal e blindada dos CSVs carregados via upload ou disco
+        # 2. Leitura universal e prioritária dos ficheiros carregados no st.file_uploader
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
-        if all(f is None for f in csv_fontes):
-            csv_fontes = glob.glob("*MOTOREX*.csv") + glob.glob("*MULTIAUTO*.csv") + glob.glob("*MAPA_FACTURAÇÃO*.csv") + glob.glob("*.csv")
-            csv_fontes = list(dict.fromkeys(csv_fontes))
-                
-        lista_streams = []
-        for f in csv_fontes:
-            if f is not None:
-                lista_streams.append(f)
-                
+        lista_streams = [f for f in csv_fontes if f is not None]
+        
+        # Se não houver upload ativo, tenta procurar no disco
+        if not lista_streams:
+            arquivos_disco = glob.glob("*MOTOREX*.csv") + glob.glob("*MULTIAUTO*.csv") + glob.glob("*MAPA_FACTURAÇÃO*.csv") + glob.glob("*.csv")
+            lista_streams = list(dict.fromkeys(arquivos_disco))
+
         for file_f in lista_streams:
             try:
                 if hasattr(file_f, "getvalue"):
@@ -478,11 +476,11 @@ else:
                 else:
                     file_bytes = file_f
 
-                for sep_val in [';', ',', '\t', None]:
+                for sep_val in [';', ',', '\t']:
                     try:
                         file_bytes.seek(0)
                         temp_df = pd.read_csv(file_bytes, sep=sep_val, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
-                        if not temp_df.empty and len(temp_df.columns) > 2:
+                        if not temp_df.empty and len(temp_df.columns) > 1:
                             df_fact_total = pd.concat([df_fact_total, temp_df], ignore_index=True)
                             break
                     except Exception:
@@ -493,13 +491,18 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação válidos ou os ficheiros estão vazios.")
         else:
+            # Painel de diagnóstico para confirmar visualmente que os CSVs foram lidos com sucesso
+            with st.expander("🔍 [DEBUG] Verificar leitura dos CSVs de Faturação", expanded=False):
+                st.write(f"Total de linhas lidas nos CSVs: {len(df_fact_total)}")
+                st.dataframe(df_fact_total.head(5))
+
             col_ofic_idx = 0
             col_data_idx = min(28, len(df_fact_total.columns) - 1)
             col_val_idx = min(24, len(df_fact_total.columns) - 1)
 
             for col in df_fact_total.columns:
                 parsed_dates = pd.to_datetime(df_fact_total[col], dayfirst=True, errors='coerce')
-                if parsed_dates.notna().mean() > 0.05:
+                if parsed_dates.notna().mean() > 0.03:
                     col_data_idx = col
                     break
 
@@ -507,7 +510,7 @@ else:
                 if col != col_data_idx:
                     sample_vals = df_fact_total[col].astype(str).str.replace('€', '').str.strip()
                     numeric_check = pd.to_numeric(sample_vals.str.replace('.', '', regex=False).str.replace(',', '.', regex=False), errors='coerce')
-                    if numeric_check.notna().mean() > 0.05:
+                    if numeric_check.notna().mean() > 0.03:
                         col_val_idx = col
                         break
 
