@@ -50,6 +50,8 @@ if "autenticado" not in st.session_state:
     st.session_state.utilizador = ""
     st.session_state.oficinas_autorizadas = []
     st.session_state.acesso_total = False
+    st.session_state.agrupar_perfil = False
+    st.session_state.oficinas_agrupadas_perfil = []
 
 df_perfis = pd.DataFrame()
 if os.path.exists("perfis_utilizadores.xlsx"):
@@ -186,6 +188,15 @@ with container_login:
                         st.session_state.utilizador = match.iloc[0]["Utilizador"]
                         permissoes_str = str(match.iloc[0]["Oficinas permitidas"]).strip()
                         
+                        agrupar_val = str(match.iloc[0].get("Agrupar", "não")).strip().lower()
+                        st.session_state.agrupar_perfil = (agrupar_val == "sim")
+                        
+                        agrupamento_str = str(match.iloc[0].get("Agrupamento", "")).strip()
+                        if agrupamento_str and agrupamento_str.lower() != "nan":
+                            st.session_state.oficinas_agrupadas_perfil = [o.strip().upper() for o in agrupamento_str.split(",") if o.strip()]
+                        else:
+                            st.session_state.oficinas_agrupadas_perfil = []
+
                         if permissoes_str.lower() == "todas":
                             st.session_state.acesso_total = True
                             st.session_state.oficinas_autorizadas = []
@@ -206,6 +217,8 @@ with container_login:
             st.session_state.utilizador = ""
             st.session_state.oficinas_autorizadas = []
             st.session_state.acesso_total = False
+            st.session_state.agrupar_perfil = False
+            st.session_state.oficinas_agrupadas_perfil = []
             st.rerun()
 
 file_mecanicos_up = st.session_state.get("up_mec")
@@ -249,7 +262,6 @@ def oficina_permitida_check(oficina_nome):
     oficina_up = limpar_str(oficina_nome)
     for permitida in st.session_state.oficinas_autorizadas:
         p_clean = limpar_str(permitida)
-        # Correspondência estrita ou por inclusão exata com as oficinas do perfil
         if p_clean == oficina_up or p_clean in oficina_up or oficina_up in p_clean:
             return True
     return False
@@ -461,7 +473,10 @@ else:
         if target_orc_file is not None:
             try:
                 df_orc = pd.read_excel(target_orc_file, sheet_name="Oficina_ORÇAMENTO")
-                df_agrup = pd.read_excel(target_orc_file, sheet_name="Agrupamento_oficinas")
+                if "Agrupamento_facturacao" in pd.ExcelFile(target_orc_file).sheet_names:
+                    df_agrup = pd.read_excel(target_orc_file, sheet_name="Agrupamento_facturacao")
+                elif "Agrupamento_oficinas" in pd.ExcelFile(target_orc_file).sheet_names:
+                    df_agrup = pd.read_excel(target_orc_file, sheet_name="Agrupamento_oficinas")
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
@@ -545,7 +560,14 @@ else:
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
-            oficinas_autorizadas_lista = [o for o in oficinas_disponiveis_fat if oficina_permitida_check(o)]
+            # Aplicar filtro de permissão e agrupamento do perfil
+            if st.session_state.acesso_total:
+                oficinas_autorizadas_lista = oficinas_disponiveis_fat
+            else:
+                if st.session_state.agrupar_perfil and st.session_state.oficinas_agrupadas_perfil:
+                    oficinas_autorizadas_lista = st.session_state.oficinas_agrupadas_perfil
+                else:
+                    oficinas_autorizadas_lista = [o for o in oficinas_disponiveis_fat if oficina_permitida_check(o)]
             
             if not oficinas_autorizadas_lista:
                 oficinas_autorizadas_lista = ["Sem acesso"]
@@ -553,10 +575,9 @@ else:
             # Caixa com a Cidade e Caixa de Seleção da Oficina
             col_sel_cidade, col_sel_ofic = st.columns(2)
             
-            # Determinar cidades disponíveis com base nas oficinas autorizadas
             cidades_autorizadas = []
             if not df_agrup.empty and len(df_agrup.columns) >= 3:
-                col_cidade_agrup = df_agrup.columns[2] # Coluna CIDADE
+                col_cidade_agrup = df_agrup.columns[2]
                 dict_cidade = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip().str.upper(), df_agrup[col_cidade_agrup].astype(str).str.strip()))
                 cidades_autorizadas = sorted(list(set([dict_cidade.get(o.upper(), "Geral") for o in oficinas_autorizadas_lista])))
             else:
@@ -565,7 +586,6 @@ else:
             with col_sel_cidade:
                 cidade_selecionada = st.selectbox("Selecionar Cidade:", options=cidades_autorizadas)
 
-            # Filtrar oficinas autorizadas pela cidade selecionada
             if cidade_selecionada != "Geral":
                 oficinas_filtradas_cidade = []
                 for o in oficinas_autorizadas_lista:
