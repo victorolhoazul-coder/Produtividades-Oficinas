@@ -570,7 +570,7 @@ else:
             df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
             df_diario = df_diario.dropna(subset=["Data"]).sort_values("Data")
             
-            # Gerar APENAS DIAS ÚTEIS do mês inteiro para o eixo X do gráfico (tal como no Excel do exemplo)
+            # Gerar APENAS DIAS ÚTEIS do mês inteiro para o eixo X do gráfico
             inicio_mes = date(ano_corrente, mes_selecionado, 1)
             if mes_selecionado == 12:
                 fim_mes = date(ano_corrente + 1, 1, 1) - timedelta(days=1)
@@ -589,7 +589,9 @@ else:
             df_completo_dias = pd.DataFrame({"Data": dias_uteis_lista})
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             
-            # Limite atual do dia (para saber onde param as barras reais)
+            # Formatar a data como string legível (ex: "02/11/2026") para o eixo X categórico (evita buracos de fim de semana)
+            df_completo_dias["Data_Str"] = pd.to_datetime(df_completo_dias["Data"]).dt.strftime("%d/%m/%Y")
+            
             hoje_atual = datetime.now().date()
             if ano_corrente == hoje_atual.year and mes_selecionado == hoje_atual.month:
                 data_limite_grafico = hoje_atual
@@ -598,7 +600,6 @@ else:
 
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # Se for dia futuro, a faturação acumulada fica a zero/null para as barras pararem no dia atual
             df_completo_dias["Facturacao_Acumulada_Graf"] = df_completo_dias.apply(
                 lambda row: row["Facturacao_Acumulada"] if row["Data"] <= data_limite_grafico else None, axis=1
             )
@@ -643,7 +644,6 @@ else:
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
-            # Linha de orçamento contínua e reta por cada dia útil ao longo de todo o mês
             orcamentos_ac = []
             acum = 0.0
             for d in df_completo_dias["Data"]:
@@ -651,7 +651,6 @@ else:
                 orcamentos_ac.append(acum)
             df_completo_dias["Orcamento_Acumulado"] = orcamentos_ac
             
-            # Faturação à data e Orçamento acumulado correspondente aos dias úteis decorridos até à data
             val_fat_reais = df_diario[df_diario["Data"] <= data_limite_grafico]["Facturacao_Diaria"]
             facturacao_a_data = val_fat_reais.sum() if not val_fat_reais.empty else 0.0
             
@@ -663,14 +662,15 @@ else:
             col_graf, col_kpi = st.columns([3, 1])
             
             with col_graf:
+                # Eixo X categórico ordenado pela sequência exata dos dias úteis
                 base = alt.Chart(df_completo_dias).encode(
-                    x=alt.X('Data:T', title='Data', axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45))
+                    x=alt.X('Data_Str:N', title='Data', sort=list(df_completo_dias["Data_Str"]), axis=alt.Axis(labelAngle=-45))
                 )
                 
                 barras = base.mark_bar(color='#115e59').encode(
                     y=alt.Y('Facturacao_Acumulada_Graf:Q', title='Valor (€)'),
                     tooltip=[
-                        alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
+                        alt.Tooltip('Data_Str:N', title='Data'),
                         alt.Tooltip('Facturacao_Diaria_Graf:Q', title='Faturação Diária', format=',.2f'),
                         alt.Tooltip('Facturacao_Acumulada_Graf:Q', title='Faturação Acumulada', format=',.2f')
                     ]
@@ -679,7 +679,7 @@ else:
                 linha_orc = base.mark_line(color='#f97316', strokeWidth=3).encode(
                     y=alt.Y('Orcamento_Acumulado:Q', title='Orçamento Acumulado'),
                     tooltip=[
-                        alt.Tooltip('Data:T', title='Data', format='%d/%m/%Y'),
+                        alt.Tooltip('Data_Str:N', title='Data'),
                         alt.Tooltip('Orcamento_Acumulado:Q', title='Orçamento Acumulado', format=',.2f')
                     ]
                 )
