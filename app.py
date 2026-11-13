@@ -455,7 +455,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # --- LEITURA ROBUSTA E DIRETA DOS FICHEIROS CSV (SUPORTA UPLOADS DO STREAMLIT) ---
+        # --- LEITURA BLINDADA DOS CSVs DE FATURAÇÃO ---
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         lista_streams = [f for f in csv_fontes if f is not None]
@@ -466,11 +466,11 @@ else:
 
         for file_f in lista_streams:
             try:
-                if hasattr(file_f, "seek"):
+                if hasattr(file_f, "getvalue"):
+                    file_bytes = io.BytesIO(file_f.getvalue())
+                elif hasattr(file_f, "read"):
                     file_f.seek(0)
                     file_bytes = io.BytesIO(file_f.read())
-                elif hasattr(file_f, "getvalue"):
-                    file_bytes = io.BytesIO(file_f.getvalue())
                 elif isinstance(file_f, str) and os.path.exists(file_f):
                     with open(file_f, "rb") as f_in:
                         file_bytes = io.BytesIO(f_in.read())
@@ -583,13 +583,13 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # --- LEITURA EXATA DO ORÇAMENTO (MAPEAMENTO DIRETO PARA NOVEMBRO / 51.827 €) ---
+            # --- LEITURA EXATA E BLINDADA DO ORÇAMENTO (EVITA TOTAIS GERAIS) ---
             orcamento_mensal = 0.0
             if not df_orc.empty:
                 df_orc.columns = [str(c).strip() for c in df_orc.columns]
                 col_ofic_orc = df_orc.columns[0]
                 
-                # Identifica a coluna correta para o mês (ex: Novembro / Coluna 11 ou nome correspondente)
+                # Identifica a coluna do mês selecionado
                 col_mes_alvo = None
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
                 
@@ -599,7 +599,6 @@ else:
                         col_mes_alvo = c
                         break
                 
-                # Se não encontrar pelo nome, usa o índice correspondente ao mês (Janeiro=1, ..., Novembro=11)
                 if col_mes_alvo is None and len(df_orc.columns) > mes_selecionado:
                     col_mes_alvo = df_orc.columns[mes_selecionado]
                 elif col_mes_alvo is None and len(df_orc.columns) > 4:
@@ -607,29 +606,30 @@ else:
 
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic_orc])
+                    # Ignora linhas de cabeçalho, total ou vazias
+                    if not ofic_row or "TOTAL" in ofic_row or "OFICINA" in ofic_row or "MAPA" in ofic_row:
+                        continue
+                    
                     if sel_clean in ofic_row or ofic_row in sel_clean:
-                        # Extrai explicitamente da coluna do mês ou varre os valores numéricos da linha
                         val_raw = row[col_mes_alvo] if col_mes_alvo in df_orc.columns else None
                         try:
                             if val_raw is not None and pd.notna(val_raw):
                                 v_str = str(val_raw).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
                                 v_num = float(v_str)
-                                if v_num > 100:
+                                if 100 < v_num < 1000000: # Valor de orçamento mensal plausível (exclui somas totais gigantes)
                                     orcamento_mensal = v_num
                                     break
                         except:
                             pass
                         
-                        # Fallback: Procura o valor correto na linha correspondente à oficina
+                        # Fallback na linha exata da oficina
                         for val in row.values:
                             try:
                                 v_str = str(val).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
                                 v_num = float(v_str)
-                                if v_num > 1000 and v_num == 51827.0: # Garante captação exata se for o valor de referência
+                                if 1000 < v_num < 1000000:
                                     orcamento_mensal = v_num
                                     break
-                                elif v_num > 1000 and orcamento_mensal == 0.0:
-                                    orcamento_mensal = v_num
                             except:
                                 pass
                         if orcamento_mensal > 0:
@@ -688,11 +688,11 @@ else:
 
         for file_f in lista_streams:
             try:
-                if hasattr(file_f, "seek"):
+                if hasattr(file_f, "getvalue"):
+                    file_bytes = io.BytesIO(file_f.getvalue())
+                elif hasattr(file_f, "read"):
                     file_f.seek(0)
                     file_bytes = io.BytesIO(file_f.read())
-                elif hasattr(file_f, "getvalue"):
-                    file_bytes = io.BytesIO(file_f.getvalue())
                 elif isinstance(file_f, str) and os.path.exists(file_f):
                     with open(file_f, "rb") as f_in:
                         file_bytes = io.BytesIO(f_in.read())
