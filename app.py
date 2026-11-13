@@ -92,7 +92,7 @@ sigla_mes = meses_sigla.get(mes_selecionado, "NOV")
 
 cidade_feriado = st.sidebar.selectbox(
     "Local para Feriados Municipais:",
-    options=["Nacional (Sem Municipal)", "Beja", "Évora", "Portimão", "Faro", "Setúbal", "Sines"]
+    options=["Nacional (Sem Municipal)", "Beja", "Évora", "Portimão", "Faro", "Setúbal", "Sines", "Portalegre"]
 )
 
 if st.sidebar.button("Atualizar / Limpar Cache"):
@@ -118,6 +118,7 @@ def obter_feriados_mes(ano, mes, cidade="Nacional (Sem Municipal)"):
     elif "FARO" in cidade_upper: feriados.append(date(ano, 9, 7))     
     elif "SETÚBAL" in cidade_upper or "SETUBAL" in cidade_upper: feriados.append(date(ano, 9, 15))    
     elif "SINES" in cidade_upper: feriados.append(date(ano, 11, 24))
+    elif "PORTALEGRE" in cidade_upper: feriados.append(date(ano, 5, 23))
     return feriados
 
 def calcular_dias_uteis_mes(ano, mes, cidade="Nacional (Sem Municipal)"):
@@ -270,6 +271,7 @@ def oficina_permitida_check(oficina_nome):
 
 def detetar_cidade(nome_oficina):
     u = limpar_str(nome_oficina)
+    if " PORTALEGRE" in u or u.endswith("PORTALEGRE") or "PORTALEGRE " in u: return "Portalegre"
     if " BEJA" in u or u.endswith("BEJA") or "BEJA " in u: return "Beja"
     if " FARO" in u or u.endswith("FARO") or "FARO " in u: return "Faro"
     if " EVORA" in u or u.endswith("EVORA") or "EVORA " in u or "ÉVORA" in u: return "Évora"
@@ -279,13 +281,11 @@ def detetar_cidade(nome_oficina):
     if " ALMADA" in u or u.endswith("ALMADA") or "ALMADA " in u: return "Almada"
     if " PALMELA" in u or u.endswith("PALMELA") or "PALMELA " in u: return "Palmela"
     if " MONTIJO" in u or u.endswith("MONTIJO") or "MONTIJO " in u: return "Montijo"
-    if " PORTALEGRE" in u or u.endswith("PORTALEGRE") or "PORTALEGRE " in u: return "Portalegre"
     return "Geral"
 
 def padronizar_oficina_fat(nome):
     u = limpar_str(nome)
     
-    # Regras específicas para Évora e Portalegre
     if "PORTALEGRE" in u:
         if "EUROREPAR" in u:
             return "Eurorepar Portalegre"
@@ -302,7 +302,6 @@ def padronizar_oficina_fat(nome):
         else:
             return "Mecânica Stellantis Évora"
 
-    # Regra geral para as restantes cidades
     cidades_lista = ["BEJA", "FARO", "PORTIMAO", "SETUBAL", "SINES", "ALMADA", "PALMELA", "MONTIJO"]
     cidade_encontrada = next((c for c in cidades_lista if c in u), None)
     
@@ -372,6 +371,7 @@ else:
             if "ÉVORA" in nome_upper or "EVORA" in nome_upper: return "MECÂNICA ÉVORA"
             if "SETÚBAL" in nome_upper or "SETUBAL" in nome_upper: return "MECÂNICA SETÚBAL"
             if "SINES" in nome_upper: return "MECÂNICA SINES"
+            if "PORTALEGRE" in nome_upper: return "PORTALEGRE"
             return nome_str
 
         candidatos_op = ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico", "Mecanico"]
@@ -437,6 +437,7 @@ else:
                         elif "FARO" in of_upper: local_val = "Faro"
                         elif "SETÚBAL" in of_upper or "SETUBAL" in of_upper: local_val = "Setúbal"
                         elif "SINES" in of_upper: local_val = "Sines"
+                        elif "PORTALEGRE" in of_upper: local_val = "Portalegre"
 
                     linhas_sem_produtivo.append({
                         "Técnico": "Sem produtivo",
