@@ -473,9 +473,10 @@ else:
         if target_orc_file is not None:
             try:
                 df_orc = pd.read_excel(target_orc_file, sheet_name="Oficina_ORÇAMENTO")
-                if "Agrupamento_facturacao" in pd.ExcelFile(target_orc_file).sheet_names:
+                xl_orc = pd.ExcelFile(target_orc_file)
+                if "Agrupamento_facturacao" in xl_orc.sheet_names:
                     df_agrup = pd.read_excel(target_orc_file, sheet_name="Agrupamento_facturacao")
-                elif "Agrupamento_oficinas" in pd.ExcelFile(target_orc_file).sheet_names:
+                elif "Agrupamento_oficinas" in xl_orc.sheet_names:
                     df_agrup = pd.read_excel(target_orc_file, sheet_name="Agrupamento_oficinas")
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
@@ -560,7 +561,6 @@ else:
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
-            # Aplicar filtro de permissão e agrupamento do perfil
             if st.session_state.acesso_total:
                 oficinas_autorizadas_lista = oficinas_disponiveis_fat
             else:
@@ -572,16 +572,14 @@ else:
             if not oficinas_autorizadas_lista:
                 oficinas_autorizadas_lista = ["Sem acesso"]
 
-            # Caixa com a Cidade e Caixa de Seleção da Oficina
             col_sel_cidade, col_sel_ofic = st.columns(2)
             
-            cidades_autorizadas = []
+            dict_cidade = {}
             if not df_agrup.empty and len(df_agrup.columns) >= 3:
                 col_cidade_agrup = df_agrup.columns[2]
                 dict_cidade = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip().str.upper(), df_agrup[col_cidade_agrup].astype(str).str.strip()))
-                cidades_autorizadas = sorted(list(set([dict_cidade.get(o.upper(), "Geral") for o in oficinas_autorizadas_lista])))
-            else:
-                cidades_autorizadas = ["Geral", "Beja", "Évora", "Portimão", "Faro", "Setúbal", "Sines"]
+            
+            cidades_autorizadas = sorted(list(set([dict_cidade.get(o.upper(), "Beja" if "BEJA" in o.upper() else ("Faro" if "FARO" in o.upper() else ("Évora" if "ÉVORA" in o.upper() or "EVORA" in o.upper() else ("Portimão" if "PORTIMÃO" in o.upper() or "PORTIMAO" in o.upper() else ("Setúbal" if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper() else "Geral"))))) for o in oficinas_autorizadas_lista])))
 
             with col_sel_cidade:
                 cidade_selecionada = st.selectbox("Selecionar Cidade:", options=cidades_autorizadas)
@@ -589,9 +587,13 @@ else:
             if cidade_selecionada != "Geral":
                 oficinas_filtradas_cidade = []
                 for o in oficinas_autorizadas_lista:
-                    c_oficina = dict_cidade.get(o.upper(), "").upper() if 'dict_cidade' in locals() else ""
-                    if cidade_selecionada.upper() in c_oficina or cidade_selecionada.upper() in o.upper():
-                        oficinas_filtradas_cidade.append(o)
+                    c_oficina = dict_cidade.get(o.upper(), "").upper()
+                    if not c_oficina:
+                        if cidade_selecionada.upper() in o.upper():
+                            oficinas_filtradas_cidade.append(o)
+                    else:
+                        if cidade_selecionada.upper() in c_oficina:
+                            oficinas_filtradas_cidade.append(o)
                 if not oficinas_filtradas_cidade:
                     oficinas_filtradas_cidade = oficinas_autorizadas_lista
             else:
@@ -659,6 +661,9 @@ else:
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
                 exclusoes = ["TOTAL", "GRUPO", "MAPA", "ACUMULADO", "GERAL", "RESUMO", "TODAS"]
                 
+                cidades_keywords = ["BEJA", "EVORA", "ÉVORA", "FARO", "SETUBAL", "SETÚBAL", "PORTIMAO", "PORTIMÃO", "SINES", "ALMADA"]
+                cidade_sel = next((c for c in cidades_keywords if c in sel_clean or c in cidade_selecionada.upper()), "")
+                
                 orc_encontrado = 0.0
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
@@ -683,17 +688,12 @@ else:
                                 pass
                                 
                     if mes_encontrado:
-                        if st.session_state.acesso_total:
-                            if sel_clean == ofic_row:
-                                orc_encontrado = converter_valor_pt(row[col_val])
+                        if sel_clean == ofic_row or sel_clean in ofic_row or ofic_row in sel_clean or (cidade_sel and cidade_sel in ofic_row):
+                            val_v = converter_valor_pt(row[col_val])
+                            if val_v > 0 and val_v < 300000:
+                                orc_encontrado = val_v
                                 break
-                        else:
-                            if sel_clean == ofic_row or sel_clean in ofic_row or ofic_row in sel_clean:
-                                val_v = converter_valor_pt(row[col_val])
-                                if val_v > 0:
-                                    orc_encontrado = val_v
-                                    break
-                                    
+                                
                 orcamento_mensal = orc_encontrado
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
