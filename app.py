@@ -734,4 +734,27 @@ else:
                 )
                 
                 linha_orc = base.mark_line(color='#f97316', strokeWidth=3).encode(
-                    y=alt.Y('Orcamento_Acumulado
+                    y=alt.Y('Orcamento_Acumulado:Q', title='Orçamento Acumulado'),
+                    tooltip=[
+                        alt.Tooltip('Data_Str:N', title='Data'),
+                        alt.Tooltip('Orcamento_Acumulado:Q', title='Orçamento Acumulado', format=',.2f')
+                    ]
+                )
+                
+                chart = (barras + linha_orc).properties(height=420).interactive()
+                st.altair_chart(chart, use_container_width=True)
+                
+            with col_kpi:
+                st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.0f} €".replace(",", " "))
+                st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
+                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
+                
+                cor_desvio = "green" if desvio_orcamento >= 0 else "red"
+                desvio_formatado = f"{desvio_orcamento:,.0f} €".replace(",", " ")
+                
+                st.markdown(f"""
+                    <div style="font-size: 14px; font-weight: 600; color: rgb(49, 51, 63); margin-bottom: 0px;">DESVIO ORÇAMENTO</div>
+                    <div style="font-size: 24px; font-weight: 700; color: {cor_desvio}; margin-top: 0px; margin-bottom: 0px;">{desvio_formatado}</div>
+                """, unsafe_allow_html=True)
+                
+                st.metric(label="", value="", delta=f"{desvio_orcamento:,.0f} €".replace(",", " "), label_visibility="collapsed")
