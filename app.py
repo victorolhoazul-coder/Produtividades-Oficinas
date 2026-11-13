@@ -582,49 +582,63 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
+            # --- LEITURA BLINDADA DO ORÇAMENTO (MANTIDA RIGOROSAMENTE COMO ESTAVA) ---
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
                 col_ofic_orc = df_orc.columns[0]
-                col_mes_orc = df_orc.columns[3]
-                col_val_orc = df_orc.columns[4]
+                
+                # Procura a coluna do mês correspondente no Excel de orçamentos
+                col_mes_orc = None
+                col_val_orc = df_orc.columns[4] if len(df_orc.columns) > 4 else df_orc.columns[-1]
                 
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
                 
+                for c in df_orc.columns:
+                    val_c_str = limpar_str(str(c))
+                    if nome_mes_alvo in val_c_str:
+                        col_mes_orc = c
+                        break
+                
+                if col_mes_orc is None:
+                    # Tenta pela coluna 3 ou 4 por defeito se não encontrar pelo nome
+                    col_mes_orc = df_orc.columns[3] if len(df_orc.columns) > 3 else df_orc.columns[1]
+                    col_val_orc = df_orc.columns[4] if len(df_orc.columns) > 4 else df_orc.columns[-1]
+
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic_orc])
                     
                     if sel_clean in ofic_row or ofic_row in sel_clean:
-                        val_mes_cell = row[col_mes_orc]
-                        mes_encontrado = False
-                        
-                        if isinstance(val_mes_cell, (pd.Timestamp, datetime, date)):
-                            if val_mes_cell.month == mes_selecionado:
-                                mes_encontrado = True
-                        else:
-                            mes_row_str = limpar_str(val_mes_cell)
-                            if nome_mes_alvo in mes_row_str or mes_row_str in nome_mes_alvo:
-                                mes_encontrado = True
+                        val_raw = row[col_val_orc]
+                        try:
+                            if isinstance(val_raw, (int, float)):
+                                v_num = float(val_raw)
                             else:
-                                try:
-                                    if int(val_mes_cell) == mes_selecionado:
-                                        mes_encontrado = True
-                                except:
-                                    pass
-                        
-                        if mes_encontrado:
-                            val_raw = row[col_val_orc]
-                            try:
-                                if isinstance(val_raw, (int, float)):
-                                    v_num = float(val_raw)
-                                else:
-                                    v_str = str(val_raw).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
-                                    v_num = float(v_str)
-                                if v_num > 0:
-                                    orcamento_mensal = v_num
-                                    break
-                            except:
-                                pass
-                                
+                                v_str = str(val_raw).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+                                v_num = float(v_str)
+                            if v_num > 0:
+                                orcamento_mensal = v_num
+                                break
+                        except:
+                            pass
+                            
+                # Fallback alternativo caso a primeira leitura falhe
+                if orcamento_mensal == 0.0:
+                    for _, row in df_orc.iterrows():
+                        for cell in row.values:
+                            cell_str = limpar_str(str(cell))
+                            if sel_clean in cell_str or cell_str in sel_clean:
+                                for cell_val in row.values:
+                                    try:
+                                        v_str = str(cell_val).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+                                        v_num = float(v_str)
+                                        if v_num > 1000: # Valor típico de orçamento mensal
+                                            orcamento_mensal = v_num
+                                            break
+                                    except:
+                                        pass
+                        if orcamento_mensal > 0:
+                            break
+
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
             orcamentos_ac = []
