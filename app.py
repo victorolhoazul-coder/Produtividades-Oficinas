@@ -101,36 +101,20 @@ def calcular_dias_uteis_mes(ano, mes, cidade="Nacional (Sem Municipal)"):
     fim = proximo_mes - timedelta(days=1)
     
     feriados = [
-        date(ano, 1, 1),   
-        date(ano, 4, 25),  
-        date(ano, 5, 1),   
-        date(ano, 6, 10),  
-        date(ano, 8, 15),  
-        date(ano, 10, 5),  
-        date(ano, 12, 1),  
-        date(ano, 12, 8),  
-        date(ano, 12, 25), 
+        date(ano, 1, 1), date(ano, 4, 25), date(ano, 5, 1),   
+        date(ano, 6, 10), date(ano, 8, 15), date(ano, 10, 5),  
+        date(ano, 12, 1), date(ano, 12, 8), date(ano, 12, 25), 
     ]
-    
     if ano == 2026:
-        feriados.extend([
-            date(2026, 4, 3),   
-            date(2026, 6, 4),   
-        ])
+        feriados.extend([date(2026, 4, 3), date(2026, 6, 4)])
         
     cidade_upper = str(cidade).upper()
-    if "BEJA" in cidade_upper:
-        feriados.append(date(ano, 5, 14))    
-    elif "ÉVORA" in cidade_upper or "EVORA" in cidade_upper:
-        feriados.append(date(ano, 6, 29))    
-    elif "PORTIMÃO" in cidade_upper or "PORTIMAO" in cidade_upper:
-        feriados.append(date(ano, 12, 19))   
-    elif "FARO" in cidade_upper:
-        feriados.append(date(ano, 9, 7))     
-    elif "SETÚBAL" in cidade_upper or "SETUBAL" in cidade_upper:
-        feriados.append(date(ano, 9, 15))    
-    elif "SINES" in cidade_upper:
-        feriados.append(date(ano, 11, 24))   
+    if "BEJA" in cidade_upper: feriados.append(date(ano, 5, 14))    
+    elif "ÉVORA" in cidade_upper or "EVORA" in cidade_upper: feriados.append(date(ano, 6, 29))    
+    elif "PORTIMÃO" in cidade_upper or "PORTIMAO" in cidade_upper: feriados.append(date(ano, 12, 19))   
+    elif "FARO" in cidade_upper: feriados.append(date(ano, 9, 7))     
+    elif "SETÚBAL" in cidade_upper or "SETUBAL" in cidade_upper: feriados.append(date(ano, 9, 15))    
+    elif "SINES" in cidade_upper: feriados.append(date(ano, 11, 24))   
         
     dias_uteis = 0
     atual = inicio
@@ -468,7 +452,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura Robusta com Motor Python e Ignorar Linhas Corrompidas (on_bad_lines='skip')
+        # 2. Leitura com skiprows=3 para saltar os metadados do relatório CSV
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
@@ -493,8 +477,7 @@ else:
                     t_temp = pd.DataFrame()
                     file_bytes.seek(0)
                     try:
-                        # Usar engine='python' com sep=None e on_bad_lines='skip' resolve erros de tokenização em CSVs complexos
-                        temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", on_bad_lines='skip', header=0)
+                        temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", skiprows=3, on_bad_lines='skip', header=0)
                         if len(temp_df.columns) > 1:
                             t_temp = temp_df
                     except Exception as ex_read:
@@ -515,11 +498,14 @@ else:
 
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
             
+            # Limpar linhas indesejadas do cabeçalho / rodapé do CSV
+            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO"]
+            df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.upper().isin(invalidos)]
+            df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.startswith("*")]
+
             # Conversão robusta da Data
             col_data_raw = df_fact_total.iloc[:, idx_data]
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
-            if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
-                df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, format="mixed", dayfirst=True, errors="coerce")
 
             # Tratamento robusto dos valores numéricos
             col_valor_raw = df_fact_total.iloc[:, idx_val]
@@ -541,12 +527,15 @@ else:
             else:
                 df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
 
-            oficinas_disponiveis_fat = sorted(df_fact_total["Oficina_Agrupada"].unique().tolist())
+            oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
             if not df_orc.empty:
                 df_orc.columns = [str(c).strip() for c in df_orc.columns]
-                oficinas_orc_unicas = sorted(df_orc[df_orc.columns[0]].astype(str).str.strip().unique().tolist())
+                oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
+            if not oficinas_disponiveis_fat:
+                oficinas_disponiveis_fat = ["Geral"]
+
             col_sel_ofic, col_empty = st.columns([2, 2])
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
@@ -558,16 +547,17 @@ else:
 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
-            df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean]
-            if df_oficina_fat.empty:
-                df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False)]
-            if df_oficina_fat.empty:
-                df_oficina_fat = df_fact_total[df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False)]
+            df_oficina_fat = df_fact_total[
+                df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False) |
+                df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)
+            ]
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total
             
             # Filtro estritamente pelo mês e ano selecionados
-            df_oficina_fat = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
+            df_mes_ano = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
+            if not df_mes_ano.empty:
+                df_oficina_fat = df_mes_ano
             
             df_diario = df_oficina_fat.groupby(df_oficina_fat["Data_Parsed"].dt.date, as_index=False)["Valor_Num"].sum()
             df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
