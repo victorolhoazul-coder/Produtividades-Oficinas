@@ -279,11 +279,31 @@ def detetar_cidade(nome_oficina):
     if " ALMADA" in u or u.endswith("ALMADA") or "ALMADA " in u: return "Almada"
     if " PALMELA" in u or u.endswith("PALMELA") or "PALMELA " in u: return "Palmela"
     if " MONTIJO" in u or u.endswith("MONTIJO") or "MONTIJO " in u: return "Montijo"
+    if " PORTALEGRE" in u or u.endswith("PORTALEGRE") or "PORTALEGRE " in u: return "Portalegre"
     return "Geral"
 
 def padronizar_oficina_fat(nome):
     u = limpar_str(nome)
-    cidades_lista = ["BEJA", "FARO", "EVORA", "PORTIMAO", "SETUBAL", "SINES", "ALMADA", "PALMELA", "MONTIJO"]
+    
+    # Regras específicas para Évora e Portalegre
+    if "PORTALEGRE" in u:
+        if "EUROREPAR" in u:
+            return "Eurorepar Portalegre"
+        elif "PEUGEOT" in u:
+            return "Peugeot Portalegre"
+            
+    if "EVORA" in u or "ÉVORA" in u:
+        if "COLISAO" in u or "COLISÃO" in u:
+            return "Colisão Évora"
+        elif "EUROREPAR" in u:
+            return "Eurorepar Évora"
+        elif "RENAULT" in u:
+            return "Mecânica Renault Évora"
+        else:
+            return "Mecânica Stellantis Évora"
+
+    # Regra geral para as restantes cidades
+    cidades_lista = ["BEJA", "FARO", "PORTIMAO", "SETUBAL", "SINES", "ALMADA", "PALMELA", "MONTIJO"]
     cidade_encontrada = next((c for c in cidades_lista if c in u), None)
     
     if cidade_encontrada:
@@ -291,6 +311,7 @@ def padronizar_oficina_fat(nome):
             return f"Colisão {cidade_encontrada.title()}"
         else:
             return f"Mecânica {cidade_encontrada.title()}"
+            
     return str(nome).strip()
 
 # ==========================================
