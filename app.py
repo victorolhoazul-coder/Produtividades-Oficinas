@@ -283,11 +283,14 @@ def detetar_cidade(nome_oficina):
 
 def padronizar_oficina_fat(nome):
     u = limpar_str(nome)
-    if "FARO" in u:
+    cidades_lista = ["BEJA", "FARO", "EVORA", "PORTIMAO", "SETUBAL", "SINES", "ALMADA", "PALMELA", "MONTIJO"]
+    cidade_encontrada = next((c for c in cidades_lista if c in u), None)
+    
+    if cidade_encontrada:
         if "COLISAO" in u or "COLISÃO" in u:
-            return "Colisão Faro"
+            return f"Colisão {cidade_encontrada.title()}"
         else:
-            return "Mecânica Faro"
+            return f"Mecânica {cidade_encontrada.title()}"
     return str(nome).strip()
 
 # ==========================================
