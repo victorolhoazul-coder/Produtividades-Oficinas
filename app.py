@@ -452,7 +452,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura universal e flexível dos CSVs de faturação
+        # 2. Leitura universal e flexível dos CSVs de faturação com depuração visual
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
@@ -477,11 +477,12 @@ else:
                     t_temp = pd.DataFrame()
                     file_bytes.seek(0)
                     
-                    for h_val in [5, 0, 4]:
+                    # Tenta diferentes cabeçalhos e separadores se necessário
+                    for h_val in [5, 0, 4, 3, 2, 1]:
                         try:
                             file_bytes.seek(0)
                             temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=h_val, on_bad_lines='skip')
-                            if len(temp_df.columns) > 3:
+                            if len(temp_df.columns) > 2:
                                 t_temp = temp_df
                                 break
                         except Exception:
@@ -497,13 +498,19 @@ else:
         else:
             df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
             
-            col_ofic = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["OFICINA", "LOCAL", "ESCO"])), df_fact_total.columns[0])
-            col_val = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["TOTAL", "LIQ", "VALOR", "IMPORT"])), df_fact_total.columns[-1])
-            col_data = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["DATA", "EMISS", "DIA"])), df_fact_total.columns[-2])
+            # PAINEL DE DIAGNÓSTICO VISUAL PARA DETETAR O ERRO EXATO NAS COLUNAS DO CSV
+            with st.expander("🔍 [DEBUG] Ver colunas e dados brutos detetados no CSV de Faturação", expanded=False):
+                st.write("Colunas detetadas:", list(df_fact_total.columns))
+                st.dataframe(df_fact_total.head(3))
+
+            # Deteta as colunas de forma ultra flexível procurando qualquer termo relevante
+            col_ofic = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["OFICINA", "LOCAL", "ESCO", "NOME", "CLIENTE"])), df_fact_total.columns[0])
+            col_val = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["TOTAL", "LIQ", "VALOR", "IMPORT", "BRUTO"])), df_fact_total.columns[-1])
+            col_data = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["DATA", "EMISS", "DIA", "PERIODO"])), df_fact_total.columns[-2])
 
             df_fact_total["Oficina_CSV"] = df_fact_total[col_ofic].astype(str).str.strip()
             
-            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan"]
+            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan", "SUBTOTAL"]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.upper().isin(invalidos)]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.startswith("*")]
 
