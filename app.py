@@ -221,6 +221,23 @@ path_hf = file_hf_up if file_hf_up is not None else (nome_arq_hf if os.path.exis
 nome_arq_aus = f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx"
 path_ausencias = nome_arq_aus if os.path.exists(nome_arq_aus) else None
 
+def converter_valor_pt(val_str):
+    """Converte corretamente o formato português (9.966,27) para float de Python."""
+    if pd.isna(val_str):
+        return 0.0
+    s = str(val_str).replace("€", "").strip()
+    if not s:
+        return 0.0
+    # Se tiver formato PT com pontos de milhar e vírgula decimal
+    if "," in s and "." in s:
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s:
+        s = s.replace(",", ".")
+    try:
+        return float(s)
+    except:
+        return 0.0
+
 # ==========================================
 # CORPO PRINCIPAL
 # ==========================================
@@ -464,7 +481,7 @@ else:
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
                     elif hasattr(file_f, "read"):
-                        file_bytes = file_f.read()
+                        file_bytes = io.BytesIO(file_f.read())
                     else:
                         file_bytes = file_f
 
@@ -507,12 +524,7 @@ else:
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
 
             col_valor_raw = df_fact_total.iloc[:, idx_val]
-            if col_valor_raw.dtype == object:
-                s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
-                s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-                df_fact_total["Valor_Num"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
-            else:
-                df_fact_total["Valor_Num"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
+            df_fact_total["Valor_Num"] = col_valor_raw.apply(converter_valor_pt)
 
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
@@ -599,17 +611,9 @@ else:
                         
                         if mes_encontrado:
                             val_raw = row[col_val]
-                            try:
-                                if isinstance(val_raw, (int, float)):
-                                    v_num = float(val_raw)
-                                else:
-                                    v_str = str(val_raw).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
-                                    v_num = float(v_str)
-                                if v_num > 0:
-                                    orcamento_mensal = v_num
-                                    break
-                            except:
-                                pass
+                            orcamento_mensal = converter_valor_pt(val_raw)
+                            if orcamento_mensal > 0:
+                                break
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
             
@@ -651,8 +655,8 @@ else:
                 st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
-        st.subheader("🧪 Resumo de Faturação por Oficina (Varredura Inteligente de Valores)")
-        st.caption("Varre rigorosamente todas as colunas numéricas de cada linha para detetar o valor monetário correto de faturação.")
+        st.subheader("🧪 Resumo de Faturação por Oficina (Direto da Coluna A)")
+        st.caption("Apresenta o valor total faturado acumulado por oficina exatamente como vem na Coluna A dos ficheiros CSV, com conversão correta do formato numérico português.")
         
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
         
@@ -686,29 +690,17 @@ else:
                             partes = []
                             for sep in [";", "\t", ","]:
                                 p = [x.strip().replace('"', '') for x in linha_strip.split(sep)]
-                                if len(p) > 5:
+                                if len(p) > 10:
                                     partes = p
                                     break
                                     
-                            if len(partes) > 5:
+                            if len(partes) > 24:
                                 oficina_raw = partes[0]
-                                if oficina_raw.upper() in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] or oficina_raw.startswith("*"):
-                                    continue
+                                val_str = partes[24] # Índice 24 correto para a coluna Y de faturação
                                 
-                                # Procurar na linha o maior valor numérico plausível que represente a faturação
-                                melhor_valor = 0.0
-                                for parte in partes[1:]:
-                                    p_clean = parte.replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
-                                    try:
-                                        val = float(p_clean)
-                                        # Filtramos valores muito pequenos (como índices ou dias) e assumimos faturação válida
-                                        if val > 10.0 and val > melhor_valor:
-                                            melhor_valor = val
-                                    except:
-                                        pass
-                                        
-                                if melhor_valor > 0:
-                                    linhas_processadas.append({"Oficina": oficina_raw, "Total Faturado": melhor_valor})
+                                valor = converter_valor_pt(val_str)
+                                if valor > 0 and oficina_raw.upper() not in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] and not oficina_raw.startswith("*"):
+                                    linhas_processadas.append({"Oficina": oficina_raw, "Total Faturado": valor})
                     except Exception as e:
                         pass
                         
