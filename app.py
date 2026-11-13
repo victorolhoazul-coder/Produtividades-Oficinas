@@ -63,7 +63,11 @@ if os.path.exists("perfis_utilizadores.xlsx"):
 st.sidebar.header("Navegação e Módulo")
 modulo_selecionado = st.sidebar.radio(
     "Escolha o Módulo:",
-    options=["📊 Produtividade de Oficinas", "💶 Faturação e Orçamento Diário"]
+    options=[
+        "📊 Produtividade de Oficinas", 
+        "💶 Faturação e Orçamento Diário",
+        "🧪 Teste Isolado Faturação (CSV)"
+    ]
 )
 
 st.sidebar.markdown("---")
@@ -438,7 +442,7 @@ else:
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
         
-        # 1. Carregamento de Orçamentos
+        # 1. Carregamento de Orçamentos (A base original que funcionava perfeitamente)
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
@@ -468,6 +472,9 @@ else:
                 try:
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
+                    elif hasattr(file_f, "read"):
+                        file_f.seek(0)
+                        file_bytes = io.BytesIO(file_f.read())
                     elif isinstance(file_f, str):
                         with open(file_f, "rb") as f_in:
                             file_bytes = io.BytesIO(f_in.read())
@@ -574,7 +581,7 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL
+            # 4. ORÇAMENTO MENSAL (A lógica exata que já funcionava para o orçamento)
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
                 col_ofic = df_orc.columns[0]
@@ -628,7 +635,7 @@ else:
                 orcamentos_ac.append(acum)
             df_completo_dias["Orcamento_Acumulado"] = orcamentos_ac
             
-            facturacao_a_data = df_completo_dias["Facturacao_Acumulada"].iloc[-1]
+            facturacao_a_data = df_completo_dias["Facturacao_Acumulada"].iloc[-1] if not df_completo_dias.empty else 0.0
             desvio_orcamento = facturacao_a_data - orcamento_mensal
             
             col_graf, col_kpi = st.columns([3, 1])
@@ -656,3 +663,59 @@ else:
                 st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
                 st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
                 st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
+
+    elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
+        st.subheader("🧪 Laboratório de Testes - Leitura Direta de CSVs de Faturação")
+        st.caption("Este separador lê exclusivamente os ficheiros CSV de faturação e agrupa os valores por oficina, de forma totalmente isolada do resto da aplicação.")
+        
+        df_teste = pd.DataFrame()
+        csv_fontes_teste = [file_fact1_up, file_fact2_up]
+        
+        if all(f is None for f in csv_fontes_teste):
+            csv_fontes_teste = glob.glob("*.csv")
+            
+        for file_f in csv_fontes_teste:
+            if file_f is not None:
+                try:
+                    if hasattr(file_f, "getvalue"):
+                        file_bytes = io.BytesIO(file_f.getvalue())
+                    elif hasattr(file_f, "read"):
+                        file_f.seek(0)
+                        file_bytes = io.BytesIO(file_f.read())
+                    elif isinstance(file_f, str):
+                        with open(file_f, "rb") as f_in:
+                            file_bytes = io.BytesIO(f_in.read())
+                    else:
+                        file_bytes = file_f
+
+                    file_bytes.seek(0)
+                    t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", skiprows=3, on_bad_lines='skip', header=0)
+                    if not t_temp.empty and len(t_temp.columns) > 1:
+                        df_teste = pd.concat([df_teste, t_temp], ignore_index=True)
+                except Exception as e:
+                    pass
+                    
+        if df_teste.empty:
+            st.warning("⚠️ Nenhum ficheiro CSV de faturação encontrado. Carregue os ficheiros CSV na barra lateral para testar.")
+        else:
+            idx_ofic = 0
+            idx_val = 24 if df_teste.shape[1] > 24 else df_teste.shape[1] - 1
+            
+            df_teste["Oficina_Raw"] = df_teste.iloc[:, idx_ofic].astype(str).str.strip()
+            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO"]
+            df_teste = df_teste[~df_teste["Oficina_Raw"].str.upper().isin(invalidos)]
+            df_teste = df_teste[~df_teste["Oficina_Raw"].str.startswith("*")]
+            
+            col_valor_raw = df_teste.iloc[:, idx_val]
+            if col_valor_raw.dtype == object:
+                s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
+                s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                df_teste["Valor_Teste"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
+            else:
+                df_teste["Valor_Teste"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
+                
+            df_resumo_oficina = df_teste.groupby("Oficina_Raw", as_index=False)["Valor_Teste"].sum()
+            df_resumo_oficina = df_resumo_oficina.sort_values(by="Valor_Teste", ascending=False)
+            
+            st.success("✅ Ficheiros de faturação lidos com sucesso no modo isolado!")
+            st.dataframe(df_resumo_oficina.style.format({"Valor_Teste": "{:,.2f} €"}), use_container_width=True)
