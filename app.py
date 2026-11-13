@@ -452,7 +452,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura com header=5 para apanhar exatamente os cabeçalhos corretos do CSV
+        # 2. Leitura com header=5 para apanhar exatamente a linha dos cabeçalhos do CSV
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
@@ -480,7 +480,7 @@ else:
                         temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=5, on_bad_lines='skip')
                         if len(temp_df.columns) > 1:
                             t_temp = temp_df
-                    except Exception as ex_read:
+                    except Exception:
                         pass
                     
                     if not t_temp.empty:
@@ -504,12 +504,15 @@ else:
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.upper().isin(invalidos)]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.startswith("*")]
 
-            # Conversão da Data
-            col_data_raw = df_fact_total[col_data]
+            # Conversão da Data (Coluna AC / col_data)
+            col_data_raw = df_fact_total[col_data] if col_data in df_fact_total.columns else df_fact_total.iloc[:, 28]
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
+            
+            if df_fact_total["Data_Parsed"].isna().mean() > 0.8:
+                df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, format="mixed", dayfirst=True, errors="coerce")
 
-            # Tratamento dos valores numéricos
-            col_valor_raw = df_fact_total[col_val]
+            # Tratamento dos valores numéricos (Coluna Y / col_val)
+            col_valor_raw = df_fact_total[col_val] if col_val in df_fact_total.columns else df_fact_total.iloc[:, 24]
             if col_valor_raw.dtype == object:
                 s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
                 s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
@@ -548,7 +551,7 @@ else:
 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
-            # Filtro flexível e seguro: tenta encontrar por correspondência exata ou parcial, sem nunca devolver dataframe vazio se houver dados
+            # Filtro por oficina
             if sel_clean and sel_clean != "GERAL":
                 mask = (df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean) | \
                        (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean) | \
