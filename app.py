@@ -507,7 +507,6 @@ else:
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
 
-            # Mapeamento estrito usando a folha 'Agrupamento_oficinas' sem misturar sucursais indesejadas
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
@@ -538,7 +537,6 @@ else:
 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
-            # Filtro exato para evitar somar sucursais por aproximação de texto ambígua
             df_oficina_fat = df_fact_total[
                 (df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean) |
                 (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean)
@@ -691,7 +689,6 @@ else:
                                 oficina = partes[0]
                                 val_str = partes[24]
                                 
-                                val_clean = val_str.replace("€", "", regex=False) if hasattr(val_str, 'replace') else val_str
                                 val_clean = str(val_str).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
                                 try:
                                     valor = float(val_clean)
