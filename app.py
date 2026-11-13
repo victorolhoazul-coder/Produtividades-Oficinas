@@ -60,14 +60,23 @@ if os.path.exists("perfis_utilizadores.xlsx"):
     except Exception as e:
         st.error(f"Erro ao ler perfis_utilizadores.xlsx: {e}")
 
+utilizadores_com_permissao_upload = ["vazul", "mchegadinho"]
+utilizador_atual = st.session_state.utilizador.strip().lower() if st.session_state.autenticado else ""
+tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.lower() for u in utilizadores_com_permissao_upload])
+
 st.sidebar.header("Navegação e Módulo")
+opcoes_modulos = [
+    "📊 Produtividade de Oficinas", 
+    "💶 Faturação e Orçamento Diário"
+]
+
+# O teste isolado só aparece na barra lateral se fores administrador
+if tem_permissao_upload:
+    opcoes_modulos.append("🧪 Teste Isolado Faturação (CSV)")
+
 modulo_selecionado = st.sidebar.radio(
     "Escolha o Módulo:",
-    options=[
-        "📊 Produtividade de Oficinas", 
-        "💶 Faturação e Orçamento Diário",
-        "🧪 Teste Isolado Faturação (CSV)"
-    ]
+    options=opcoes_modulos
 )
 
 st.sidebar.markdown("---")
@@ -155,10 +164,6 @@ st.sidebar.progress(
 
 st.sidebar.markdown("---")
 container_filtros = st.sidebar.container()
-
-utilizadores_com_permissao_upload = ["vazul", "mchegadinho"]
-utilizador_atual = st.session_state.utilizador.strip().lower() if st.session_state.autenticado else ""
-tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.lower() for u in utilizadores_com_permissao_upload])
 
 if tem_permissao_upload:
     st.sidebar.markdown("---")
@@ -570,7 +575,6 @@ else:
             df_diario.rename(columns={"Valor_Num": "Facturacao_Diaria", "Data_Parsed": "Data"}, inplace=True)
             df_diario = df_diario.dropna(subset=["Data"]).sort_values("Data")
             
-            # Gerar APENAS DIAS ÚTEIS do mês inteiro para o eixo X do gráfico
             inicio_mes = date(ano_corrente, mes_selecionado, 1)
             if mes_selecionado == 12:
                 fim_mes = date(ano_corrente + 1, 1, 1) - timedelta(days=1)
@@ -690,7 +694,6 @@ else:
                 st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
                 st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
                 
-                # Desvio de Orçamento dinâmico com cor verde se positivo e vermelho se negativo
                 cor_desvio = "green" if desvio_orcamento >= 0 else "red"
                 desvio_formatado = f"{desvio_orcamento:,.0f} €".replace(",", " ")
                 
@@ -699,7 +702,6 @@ else:
                     <div style="font-size: 24px; font-weight: 700; color: {cor_desvio}; margin-top: 0px; margin-bottom: 0px;">{desvio_formatado}</div>
                 """, unsafe_allow_html=True)
                 
-                # Delta extra pequeno indicativo
                 st.metric(label="", value="", delta=f"{desvio_orcamento:,.0f} €".replace(",", " "), label_visibility="collapsed")
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
