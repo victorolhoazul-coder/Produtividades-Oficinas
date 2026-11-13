@@ -661,9 +661,6 @@ else:
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
                 exclusoes = ["TOTAL", "GRUPO", "MAPA", "ACUMULADO", "GERAL", "RESUMO", "TODAS"]
                 
-                cidades_keywords = ["BEJA", "EVORA", "ÉVORA", "FARO", "SETUBAL", "SETÚBAL", "PORTIMAO", "PORTIMÃO", "SINES", "ALMADA"]
-                cidade_sel = next((c for c in cidades_keywords if c in sel_clean or c in cidade_selecionada.upper()), "")
-                
                 orc_encontrado = 0.0
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
@@ -688,12 +685,19 @@ else:
                                 pass
                                 
                     if mes_encontrado:
-                        if sel_clean == ofic_row or sel_clean in ofic_row or ofic_row in sel_clean or (cidade_sel and cidade_sel in ofic_row):
-                            val_v = converter_valor_pt(row[col_val])
-                            if val_v > 0 and val_v < 300000:
-                                orc_encontrado = val_v
+                        if st.session_state.acesso_total:
+                            # Restrição exata para Administradores para evitar somas globais erradas
+                            if sel_clean == ofic_row:
+                                orc_encontrado = converter_valor_pt(row[col_val])
                                 break
-                                
+                        else:
+                            # Verificação flexível para utilizadores restritos
+                            if sel_clean == ofic_row or sel_clean in ofic_row or ofic_row in sel_clean:
+                                val_v = converter_valor_pt(row[col_val])
+                                if val_v > 0:
+                                    orc_encontrado = val_v
+                                    break
+                                    
                 orcamento_mensal = orc_encontrado
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
