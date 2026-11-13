@@ -471,7 +471,6 @@ else:
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
                     elif hasattr(file_f, "read"):
-                        file_f.seek(0)
                         file_bytes = io.BytesIO(file_f.read())
                     elif isinstance(file_f, str):
                         with open(file_f, "rb") as f_in:
@@ -657,7 +656,7 @@ else:
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Laboratório de Testes - Leitura Direta de CSVs de Faturação")
-        st.caption("Este separador lê exclusivamente os ficheiros CSV de faturação, ignora os cabeçalhos de texto e agrupa os valores reais por oficina.")
+        st.caption("Este separador lê os ficheiros CSV, localiza automaticamente onde estão os dados úteis e agrupa por oficina.")
         
         df_teste = pd.DataFrame()
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
@@ -679,8 +678,7 @@ else:
                         file_bytes = file_f
 
                     file_bytes.seek(0)
-                    # Lemos ignorando as primeiras 8 linhas de cabeçalho e metadados do relatório
-                    t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=None, skiprows=8, on_bad_lines='skip')
+                    t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
                     if not t_temp.empty:
                         df_teste = pd.concat([df_teste, t_temp], ignore_index=True)
                 except Exception as e:
@@ -689,29 +687,31 @@ else:
         if df_teste.empty:
             st.warning("⚠️ Nenhum ficheiro CSV de faturação encontrado. Carregue os ficheiros CSV na barra lateral para testar.")
         else:
-            # Identificamos a coluna da oficina (0) e a coluna do valor (última ou coluna 24)
-            idx_ofic = 0
-            idx_val = 24 if df_teste.shape[1] > 24 else df_teste.shape[1] - 1
+            # Filtragem dinâmica: recolhe apenas as linhas que contêm dados reais de oficina e valores
+            # Vamos procurar linhas onde a coluna 0 não tenha lixo de cabeçalho
+            df_teste["Oficina_Raw"] = df_teste.iloc[:, 0].astype(str).str.strip()
             
-            df_teste["Oficina_Raw"] = df_teste.iloc[:, idx_ofic].astype(str).str.strip()
-            
-            # Limpar linhas que contenham lixo, vazias ou separadores
-            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan"]
-            df_teste = df_teste[~df_teste["Oficina_Raw"].str.upper().isin(invalidos)]
-            df_teste = df_teste[~df_teste["Oficina_Raw"].str.startswith("*")]
-            df_teste = df_teste[df_teste["Oficina_Raw"].notna()]
+            # Remover linhas de cabeçalho, asteriscos e vazias
+            lixo = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan", "Ano :"]
+            df_filtrado = df_teste[~df_teste["Oficina_Raw"].str.upper().apply(lambda x: any(l in x for l in lixo))]
+            df_filtrado = df_filtrado[~df_filtrado["Oficina_Raw"].str.startswith("*")]
+            df_filtrado = df_filtrado[df_filtrado["Oficina_Raw"].notna() & (df_filtrado["Oficina_Raw"] != "")]
 
-            # Limpar e converter valores numéricos
-            col_valor_raw = df_teste.iloc[:, idx_val]
+            if df_filtrado.empty:
+                # Fallback se a filtragem for muito restrita
+                df_filtrado = df_teste
+
+            idx_val = 24 if df_filtrado.shape[1] > 24 else df_filtrado.shape[1] - 1
+            col_valor_raw = df_filtrado.iloc[:, idx_val]
+            
             if col_valor_raw.dtype == object:
                 s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
                 s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-                df_teste["Valor_Teste"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
+                df_filtrado["Valor_Teste"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
             else:
-                df_teste["Valor_Teste"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
+                df_filtrado["Valor_Teste"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
                 
-            # Agrupar por oficina
-            df_resumo_oficina = df_teste.groupby("Oficina_Raw", as_index=False)["Valor_Teste"].sum()
+            df_resumo_oficina = df_filtrado.groupby("Oficina_Raw", as_index=False)["Valor_Teste"].sum()
             df_resumo_oficina = df_resumo_oficina[df_resumo_oficina["Valor_Teste"] > 0]
             df_resumo_oficina = df_resumo_oficina.sort_values(by="Valor_Teste", ascending=False)
             
