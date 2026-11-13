@@ -464,7 +464,7 @@ else:
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
                     elif hasattr(file_f, "read"):
-                        file_bytes = io.BytesIO(file_f.read())
+                        file_bytes = file_f.read()
                     else:
                         file_bytes = file_f
 
@@ -494,7 +494,7 @@ else:
             st.warning("⚠️ Carregue os ficheiros CSV do Mapa de Faturação 1 e 2 na barra lateral.")
         else:
             idx_ofic = 0
-            idx_val = 26 if df_fact_total.shape[1] > 26 else df_fact_total.shape[1] - 3
+            idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
 
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
@@ -651,8 +651,8 @@ else:
                 st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
-        st.subheader("🧪 Resumo de Faturação por Oficina (Total Bruto do Ficheiro)")
-        st.caption("Apresenta o valor total acumulado por oficina de todo o ficheiro CSV, sem filtros de data.")
+        st.subheader("🧪 Resumo de Faturação por Oficina (Varredura Inteligente de Valores)")
+        st.caption("Varre rigorosamente todas as colunas numéricas de cada linha para detetar o valor monetário correto de faturação.")
         
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
         
@@ -686,22 +686,29 @@ else:
                             partes = []
                             for sep in [";", "\t", ","]:
                                 p = [x.strip().replace('"', '') for x in linha_strip.split(sep)]
-                                if len(p) > 10:
+                                if len(p) > 5:
                                     partes = p
                                     break
                                     
-                            if len(partes) > 25:
+                            if len(partes) > 5:
                                 oficina_raw = partes[0]
-                                # Testar índice 24, 25, 26 ou última coluna para encontrar a faturação real
-                                val_str = partes[26] if len(partes) > 26 else partes[24]
+                                if oficina_raw.upper() in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] or oficina_raw.startswith("*"):
+                                    continue
                                 
-                                val_clean = str(val_str).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
-                                try:
-                                    valor = float(val_clean)
-                                    if valor > 0 and oficina_raw.upper() not in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] and not oficina_raw.startswith("*"):
-                                        linhas_processadas.append({"Oficina": oficina_raw, "Total Faturado": valor})
-                                except:
-                                    pass
+                                # Procurar na linha o maior valor numérico plausível que represente a faturação
+                                melhor_valor = 0.0
+                                for parte in partes[1:]:
+                                    p_clean = parte.replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+                                    try:
+                                        val = float(p_clean)
+                                        # Filtramos valores muito pequenos (como índices ou dias) e assumimos faturação válida
+                                        if val > 10.0 and val > melhor_valor:
+                                            melhor_valor = val
+                                    except:
+                                        pass
+                                        
+                                if melhor_valor > 0:
+                                    linhas_processadas.append({"Oficina": oficina_raw, "Total Faturado": melhor_valor})
                     except Exception as e:
                         pass
                         
