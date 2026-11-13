@@ -473,20 +473,34 @@ else:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
         df_fact_total = pd.DataFrame()
+        
+        # 1. Tentar ler ficheiros carregados manualmente pelo admin
         csv_fontes = [file_fact1_up, file_fact2_up]
         
+        # 2. Se não houver ficheiros carregados, procurar automaticamente por CSVs na pasta do repositório (ex: MULTIAUTO...)
+        if all(f is None for f in csv_fontes):
+            arquivos_csv_pasta = glob.glob("*.csv")
+            for arq in arquivos_csv_pasta:
+                if "MULTIAUTO" in arq.upper() or "FACTURACAO" in arq.upper() or "MAPA" in arq.upper():
+                    csv_fontes.append(arq)
+            # Se mesmo assim não encontrar com filtro, apanhar todos os CSVs disponíveis na pasta
+            if not csv_fontes or all(f is None for f in csv_fontes):
+                csv_fontes = arquivos_csv_pasta
+
         for file_f in csv_fontes:
             if file_f is not None:
                 try:
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
                     elif hasattr(file_f, "read"):
-                        file_bytes = file_f.read()
+                        file_bytes = io.BytesIO(file_f.read())
                     else:
-                        file_bytes = file_f
+                        file_bytes = file_f  # É um caminho de string (arquivo local)
 
-                    file_bytes.seek(0)
-                    conteudo = file_bytes.read().decode("iso-8859-1", errors="ignore")
+                    if hasattr(file_bytes, "seek"):
+                        file_bytes.seek(0)
+                        
+                    conteudo = file_bytes.read().decode("iso-8859-1", errors="ignore") if hasattr(file_bytes, "read") else open(file_bytes, encoding="iso-8859-1", errors="ignore").read()
                     linhas = conteudo.splitlines()
                     
                     dados_temp = []
@@ -508,7 +522,7 @@ else:
                     pass
                 
         if df_fact_total.empty:
-            st.warning("⚠️ Carregue os ficheiros CSV do Mapa de Faturação 1 e 2 na barra lateral.")
+            st.warning("⚠️ Não foram encontrados ficheiros CSV de faturação na pasta do repositório nem carregados na barra lateral. Certifique-se de que os ficheiros CSV estão no GitHub.")
         else:
             idx_ofic = 0   # Coluna A
             idx_val = 24   # Coluna Y (Total Liqu)
