@@ -509,9 +509,9 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Carregue os ficheiros CSV do Mapa de Faturação 1 e 2 na barra lateral.")
         else:
-            idx_ofic = 0
-            idx_val = 24  # Coluna Y (0-indexed: 24)
-            idx_data = 28 # Coluna AC (0-indexed: 28)
+            idx_ofic = 0   # Coluna A
+            idx_val = 24   # Coluna Y (Total Liqu)
+            idx_data = 28  # Coluna AC (Data Factura)
 
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
             
@@ -655,7 +655,7 @@ else:
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Resumo de Faturação por Oficina (Direto da Coluna A)")
-        st.caption("Apresenta o valor total faturado acumulado por oficina exatamente como vem na Coluna A dos ficheiros CSV, com conversão correta do formato numérico português e filtrado ao mês selecionado.")
+        st.caption("Apresenta o valor total faturado acumulado por oficina exatamente como vem na Coluna A dos ficheiros CSV, com conversão correta do formato numérico português e filtrado rigorosamente ao mês selecionado na coluna AC.")
         
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
         
@@ -695,14 +695,14 @@ else:
                                     
                             if len(partes) > 28:
                                 oficina_raw = partes[0]  # Coluna A
-                                val_str = partes[24]     # Coluna Y
-                                data_str = partes[28]    # Coluna AC
+                                val_str = partes[24]     # Coluna Y (Total Liqu)
+                                data_str = partes[28]    # Coluna AC (Data Factura)
                                 
-                                # Filtrar pelo mês e ano selecionados
+                                # Filtrar rigorosamente pelo mês e ano selecionados através da coluna AC
                                 data_dt = pd.to_datetime(data_str, dayfirst=True, errors="coerce")
                                 if pd.notna(data_dt) and data_dt.month == mes_selecionado and data_dt.year == ano_corrente:
                                     valor = converter_valor_pt(val_str)
-                                    if valor > 0 and oficina_raw.upper() not in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] and not oficina_raw.startswith("*"):
+                                    if valor != 0 and oficina_raw.upper() not in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] and not oficina_raw.startswith("*"):
                                         linhas_processadas.append({"Oficina": oficina_raw, "Total Faturado": valor})
                     except Exception as e:
                         pass
