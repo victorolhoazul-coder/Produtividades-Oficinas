@@ -65,18 +65,12 @@ utilizador_atual = st.session_state.utilizador.strip().lower() if st.session_sta
 tem_permissao_upload = st.session_state.autenticado and (utilizador_atual in [u.lower() for u in utilizadores_com_permissao_upload])
 
 st.sidebar.header("Navegação e Módulo")
-opcoes_modulos = [
-    "📊 Produtividade de Oficinas", 
-    "💶 Faturação e Orçamento Diário"
-]
-
-# O teste isolado só aparece na barra lateral se fores administrador
-if tem_permissao_upload:
-    opcoes_modulos.append("🧪 Teste Isolado Faturação (CSV)")
-
 modulo_selecionado = st.sidebar.radio(
     "Escolha o Módulo:",
-    options=opcoes_modulos
+    options=[
+        "📊 Produtividade de Oficinas", 
+        "💶 Faturação e Orçamento Diário"
+    ]
 )
 
 st.sidebar.markdown("---")
@@ -703,73 +697,3 @@ else:
                 """, unsafe_allow_html=True)
                 
                 st.metric(label="", value="", delta=f"{desvio_orcamento:,.0f} €".replace(",", " "), label_visibility="collapsed")
-
-    elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
-        st.subheader("🧪 Resumo de Faturação por Oficina (Direto da Coluna A)")
-        st.caption("Apresenta o valor total faturado acumulado por oficina exatamente como vem na Coluna A dos ficheiros CSV, com conversão correta do formato numérico português e filtrado rigorosamente ao mês selecionado na coluna AC.")
-        
-        csv_fontes_teste = [file_fact1_up, file_fact2_up]
-        
-        if all(f is None for f in csv_fontes_teste):
-            st.warning("⚠️ Por favor, faça o upload dos ficheiros CSV (Mapa de Faturação 1 e 2) na barra lateral esquerda.")
-        else:
-            linhas_processadas = []
-            
-            for file_f in csv_fontes_teste:
-                if file_f is not None:
-                    try:
-                        if hasattr(file_f, "getvalue"):
-                            file_bytes = io.BytesIO(file_f.getvalue())
-                        elif hasattr(file_f, "read"):
-                            file_bytes = file_f.read()
-                        else:
-                            file_bytes = file_f
-
-                        if isinstance(file_bytes, bytes):
-                            file_bytes = io.BytesIO(file_bytes)
-
-                        file_bytes.seek(0)
-                        conteudo = file_bytes.read().decode("iso-8859-1", errors="ignore")
-                        linhas = conteudo.splitlines()
-                        
-                        for linha in linhas:
-                            linha_strip = linha.strip()
-                            if not linha_strip:
-                                continue
-                                
-                            partes = []
-                            for sep in [";", "\t", ","]:
-                                p = [x.strip().replace('"', '') for x in linha_strip.split(sep)]
-                                if len(p) > 10:
-                                    partes = p
-                                    break
-                                    
-                            if len(partes) > 28:
-                                oficina_raw = partes[0]  # Coluna A
-                                val_str = partes[24]     # Coluna Y (Total Liqu)
-                                data_str = partes[28]    # Coluna AC (Data Factura)
-                                
-                                data_dt = pd.to_datetime(data_str, dayfirst=True, errors="coerce")
-                                if pd.notna(data_dt) and data_dt.month == mes_selecionado and data_dt.year == ano_corrente:
-                                    valor = converter_valor_pt(val_str)
-                                    if valor != 0 and oficina_raw.upper() not in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] and not oficina_raw.startswith("*"):
-                                        linhas_processadas.append({"Oficina": oficina_raw, "Total Faturado": valor})
-                    except Exception as e:
-                        pass
-                        
-            if not linhas_processadas:
-                st.warning("⚠️ Não foram encontrados dados válidos para o período selecionado. Verifique os ficheiros CSV e o mês.")
-            else:
-                df_resumo = pd.DataFrame(linhas_processadas)
-                df_resumo = df_resumo.groupby("Oficina", as_index=False)["Total Faturado"].sum()
-                df_resumo = df_resumo.sort_values(by="Total Faturado", ascending=False)
-                
-                total_geral = df_resumo["Total Faturado"].sum()
-                linha_total_df = pd.DataFrame([{"Oficina": "TOTAL MOTORPOR", "Total Faturado": total_geral}])
-                df_resumo = pd.concat([df_resumo, linha_total_df], ignore_index=True)
-                
-                st.success("✅ Resumo gerado com sucesso!")
-                st.dataframe(
-                    df_resumo.style.format({"Total Faturado": "{:,.2f} €"}),
-                    use_container_width=True
-                )
