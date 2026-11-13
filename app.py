@@ -498,23 +498,19 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação válidos ou os ficheiros estão vazios.")
         else:
-            # Coluna A = 0 (Oficina), Coluna Y = 24 (Valor), Coluna AC = 28 (Data)
             idx_ofic = 0
             idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
 
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
             
-            # Limpar linhas indesejadas do cabeçalho / rodapé do CSV
             invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO"]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.upper().isin(invalidos)]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.startswith("*")]
 
-            # Conversão robusta da Data
             col_data_raw = df_fact_total.iloc[:, idx_data]
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
 
-            # Tratamento robusto dos valores numéricos
             col_valor_raw = df_fact_total.iloc[:, idx_val]
             if col_valor_raw.dtype == object:
                 s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
@@ -523,7 +519,6 @@ else:
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
 
-            # 3. Mapeamento e Agrupamento
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
@@ -561,7 +556,6 @@ else:
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total
             
-            # Filtro estritamente pelo mês e ano selecionados
             df_mes_ano = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
             if not df_mes_ano.empty:
                 df_oficina_fat = df_mes_ano
@@ -581,7 +575,6 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL (A lógica exata que já funcionava para o orçamento)
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
                 col_ofic = df_orc.columns[0]
@@ -666,7 +659,7 @@ else:
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Laboratório de Testes - Leitura Direta de CSVs de Faturação")
-        st.caption("Este separador lê exclusivamente os ficheiros CSV de faturação e agrupa os valores por oficina, de forma totalmente isolada do resto da aplicação.")
+        st.caption("Este separador lê exclusivamente os ficheiros CSV de faturação e mostra os dados brutos lidos para validação.")
         
         df_teste = pd.DataFrame()
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
@@ -689,8 +682,8 @@ else:
                         file_bytes = file_f
 
                     file_bytes.seek(0)
-                    t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", skiprows=3, on_bad_lines='skip', header=0)
-                    if not t_temp.empty and len(t_temp.columns) > 1:
+                    t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
+                    if not t_temp.empty:
                         df_teste = pd.concat([df_teste, t_temp], ignore_index=True)
                 except Exception as e:
                     pass
@@ -698,24 +691,6 @@ else:
         if df_teste.empty:
             st.warning("⚠️ Nenhum ficheiro CSV de faturação encontrado. Carregue os ficheiros CSV na barra lateral para testar.")
         else:
-            idx_ofic = 0
-            idx_val = 24 if df_teste.shape[1] > 24 else df_teste.shape[1] - 1
-            
-            df_teste["Oficina_Raw"] = df_teste.iloc[:, idx_ofic].astype(str).str.strip()
-            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO"]
-            df_teste = df_teste[~df_teste["Oficina_Raw"].str.upper().isin(invalidos)]
-            df_teste = df_teste[~df_teste["Oficina_Raw"].str.startswith("*")]
-            
-            col_valor_raw = df_teste.iloc[:, idx_val]
-            if col_valor_raw.dtype == object:
-                s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
-                s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
-                df_teste["Valor_Teste"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
-            else:
-                df_teste["Valor_Teste"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
-                
-            df_resumo_oficina = df_teste.groupby("Oficina_Raw", as_index=False)["Valor_Teste"].sum()
-            df_resumo_oficina = df_resumo_oficina.sort_values(by="Valor_Teste", ascending=False)
-            
             st.success("✅ Ficheiros de faturação lidos com sucesso no modo isolado!")
-            st.dataframe(df_resumo_oficina.style.format({"Valor_Teste": "{:,.2f} €"}), use_container_width=True)
+            st.write("Amostra das linhas brutas lidas dos ficheiros CSV:")
+            st.dataframe(df_teste.head(20), use_container_width=True)
