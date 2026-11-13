@@ -294,7 +294,7 @@ else:
                     if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper(): return o
             if "SINES" in nome_upper:
                 for o in oficinas_oficiais:
-                    if "SINES" in o.upper(): return o
+                    if "SINES" in nome_upper: return o
             return nome_str
 
         candidatos_op = ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico", "Mecanico"]
@@ -652,13 +652,33 @@ else:
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Resumo de Faturação por Oficina (Direto dos CSVs)")
-        st.caption("Apresenta o valor total faturado acumulado por oficina, lendo rigorosamente a Coluna A e a Coluna Y.")
+        st.caption("Apresenta o valor total faturado acumulado por oficina, mapeando corretamente com a folha 'Agrupamento_oficinas'.")
         
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
         
         if all(f is None for f in csv_fontes_teste):
             st.warning("⚠️ Por favor, faça o upload dos ficheiros CSV (Mapa de Faturação 1 e 2) na barra lateral esquerda.")
         else:
+            # Carregar o dicionário exato de agrupamentos (Coluna 0 = marca/origem, Coluna 3 = destino)
+            excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
+            target_orc_file = file_orc_up if file_orc_up is not None else (excel_orc_path if os.path.exists(excel_orc_path) else None)
+            dict_agrupamento = {}
+            
+            if target_orc_file is not None:
+                try:
+                    df_agrup_test = pd.read_excel(target_orc_file, sheet_name="Agrupamento_oficinas")
+                    df_agrup_test.columns = [str(c).strip() for c in df_agrup_test.columns]
+                    if len(df_agrup_test.columns) >= 4:
+                        col_origem = df_agrup_test.columns[0]
+                        col_destino = df_agrup_test.columns[3]
+                        for _, r in df_agrup_test.iterrows():
+                            orig = str(r[col_origem]).strip()
+                            dest = str(r[col_destino]).strip()
+                            if orig and orig.upper() not in ["NAN", "NONE", "NAT"]:
+                                dict_agrupamento[orig.upper()] = dest if (dest and dest.upper() not in ["NAN", "NONE"]) else orig
+                except Exception as e:
+                    pass
+
             linhas_processadas = []
             
             for file_f in csv_fontes_teste:
@@ -695,7 +715,10 @@ else:
                                 try:
                                     valor = float(val_clean)
                                     if valor > 0 and oficina_raw.upper() not in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] and not oficina_raw.startswith("*"):
-                                        linhas_processadas.append({"Oficina": oficina_raw, "Total Faturado": valor})
+                                        # Aplicar agrupamento correto se existir, senão manter o nome original
+                                        oficina_final = dict_agrupamento.get(oficina_raw.upper(), oficina_raw)
+                                        if oficina_final and oficina_final.upper() not in ["NAN", "NONE"]:
+                                            linhas_processadas.append({"Oficina": oficina_final, "Total Faturado": valor})
                                 except:
                                     pass
                     except Exception as e:
