@@ -442,7 +442,6 @@ else:
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
         
-        # 1. Carregamento de Orçamentos (A base original que funcionava perfeitamente)
         excel_orc_path = "Orçamento-agrupamento oficinas.xlsx"
         df_orc = pd.DataFrame()
         df_agrup = pd.DataFrame()
@@ -456,7 +455,6 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura com skiprows=3 para saltar os metadados do relatório CSV
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
@@ -659,7 +657,7 @@ else:
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
         st.subheader("🧪 Laboratório de Testes - Leitura Direta de CSVs de Faturação")
-        st.caption("Este separador lê exclusivamente os ficheiros CSV de faturação e mostra os dados brutos lidos para validação.")
+        st.caption("Este separador lê exclusivamente os ficheiros CSV de faturação, ignora os cabeçalhos de texto e agrupa os valores reais por oficina.")
         
         df_teste = pd.DataFrame()
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
@@ -673,7 +671,6 @@ else:
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
                     elif hasattr(file_f, "read"):
-                        file_f.seek(0)
                         file_bytes = io.BytesIO(file_f.read())
                     elif isinstance(file_f, str):
                         with open(file_f, "rb") as f_in:
@@ -682,7 +679,8 @@ else:
                         file_bytes = file_f
 
                     file_bytes.seek(0)
-                    t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
+                    # Lemos ignorando as primeiras 8 linhas de cabeçalho e metadados do relatório
+                    t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=None, skiprows=8, on_bad_lines='skip')
                     if not t_temp.empty:
                         df_teste = pd.concat([df_teste, t_temp], ignore_index=True)
                 except Exception as e:
@@ -691,6 +689,31 @@ else:
         if df_teste.empty:
             st.warning("⚠️ Nenhum ficheiro CSV de faturação encontrado. Carregue os ficheiros CSV na barra lateral para testar.")
         else:
-            st.success("✅ Ficheiros de faturação lidos com sucesso no modo isolado!")
-            st.write("Amostra das linhas brutas lidas dos ficheiros CSV:")
-            st.dataframe(df_teste.head(20), use_container_width=True)
+            # Identificamos a coluna da oficina (0) e a coluna do valor (última ou coluna 24)
+            idx_ofic = 0
+            idx_val = 24 if df_teste.shape[1] > 24 else df_teste.shape[1] - 1
+            
+            df_teste["Oficina_Raw"] = df_teste.iloc[:, idx_ofic].astype(str).str.strip()
+            
+            # Limpar linhas que contenham lixo, vazias ou separadores
+            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan"]
+            df_teste = df_teste[~df_teste["Oficina_Raw"].str.upper().isin(invalidos)]
+            df_teste = df_teste[~df_teste["Oficina_Raw"].str.startswith("*")]
+            df_teste = df_teste[df_teste["Oficina_Raw"].notna()]
+
+            # Limpar e converter valores numéricos
+            col_valor_raw = df_teste.iloc[:, idx_val]
+            if col_valor_raw.dtype == object:
+                s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
+                s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+                df_teste["Valor_Teste"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
+            else:
+                df_teste["Valor_Teste"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
+                
+            # Agrupar por oficina
+            df_resumo_oficina = df_teste.groupby("Oficina_Raw", as_index=False)["Valor_Teste"].sum()
+            df_resumo_oficina = df_resumo_oficina[df_resumo_oficina["Valor_Teste"] > 0]
+            df_resumo_oficina = df_resumo_oficina.sort_values(by="Valor_Teste", ascending=False)
+            
+            st.success("✅ Resumo de faturação gerado com sucesso a partir dos CSVs!")
+            st.dataframe(df_resumo_oficina.style.format({"Valor_Teste": "{:,.2f} €"}), use_container_width=True)
