@@ -452,18 +452,13 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura robusta dos CSVs (com diagnóstico)
+        # 2. Leitura robusta e universal de Faturação (Trata uploads do Streamlit e ficheiros locais do disco)
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
         if all(f is None for f in csv_fontes):
             csv_fontes = glob.glob("*MOTOREX*.csv") + glob.glob("*MULTIAUTO*.csv") + glob.glob("*FACTURAÇÃO*.csv") + glob.glob("*.csv")
             csv_fontes = list(dict.fromkeys(csv_fontes))
-            
-        if not csv_fontes:
-            st.error("⚠️ Nenhum ficheiro CSV encontrado na pasta do projeto! Carrega os ficheiros manualmente na barra lateral (Admin).")
-        else:
-            st.caption(f"📁 Ficheiros CSV detetados: {csv_fontes}")
                 
         for file_f in csv_fontes:
             if file_f is not None:
