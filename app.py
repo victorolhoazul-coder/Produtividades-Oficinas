@@ -455,6 +455,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
+        # --- LEITURA ROBUSTA DOS CSVs (SUPORTE A UPLOADS E DISCO) ---
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         lista_streams = [f for f in csv_fontes if f is not None]
@@ -582,12 +583,10 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # --- LEITURA BLINDADA DO ORÇAMENTO (MANTIDA RIGOROSAMENTE COMO ESTAVA) ---
+            # --- LEITURA EXATA DO ORÇAMENTO ORIGINAL ---
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
                 col_ofic_orc = df_orc.columns[0]
-                
-                # Procura a coluna do mês correspondente no Excel de orçamentos
                 col_mes_orc = None
                 col_val_orc = df_orc.columns[4] if len(df_orc.columns) > 4 else df_orc.columns[-1]
                 
@@ -600,7 +599,6 @@ else:
                         break
                 
                 if col_mes_orc is None:
-                    # Tenta pela coluna 3 ou 4 por defeito se não encontrar pelo nome
                     col_mes_orc = df_orc.columns[3] if len(df_orc.columns) > 3 else df_orc.columns[1]
                     col_val_orc = df_orc.columns[4] if len(df_orc.columns) > 4 else df_orc.columns[-1]
 
@@ -621,7 +619,6 @@ else:
                         except:
                             pass
                             
-                # Fallback alternativo caso a primeira leitura falhe
                 if orcamento_mensal == 0.0:
                     for _, row in df_orc.iterrows():
                         for cell in row.values:
@@ -631,7 +628,7 @@ else:
                                     try:
                                         v_str = str(cell_val).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
                                         v_num = float(v_str)
-                                        if v_num > 1000: # Valor típico de orçamento mensal
+                                        if v_num > 1000:
                                             orcamento_mensal = v_num
                                             break
                                     except:
