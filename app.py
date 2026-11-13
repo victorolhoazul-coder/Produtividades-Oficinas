@@ -249,8 +249,7 @@ def oficina_permitida_check(oficina_nome):
     oficina_up = limpar_str(oficina_nome)
     for permitida in st.session_state.oficinas_autorizadas:
         p_clean = limpar_str(permitida)
-        # Verificação flexível e abrangente para permitir nomes parciais ou completos (ex: "Beja", "Colisão Beja", "Of. Peugeot Beja")
-        if p_clean in oficina_up or oficina_up in p_clean or any(word in oficina_up for word in p_clean.split() if len(word) > 3):
+        if p_clean == oficina_up or p_clean in oficina_up or oficina_up in p_clean:
             return True
     return False
 
@@ -637,13 +636,18 @@ else:
                                 pass
                                 
                     if mes_encontrado:
-                        # Correspondência unificada e flexível entre o nome da oficina selecionada e a linha do orçamento
-                        if sel_clean == ofic_row or sel_clean in ofic_row or ofic_row in sel_clean or any(w in ofic_row for w in sel_clean.split() if len(w) > 3):
-                            val_v = converter_valor_pt(row[col_val])
-                            if val_v > 0:
-                                orc_encontrado = val_v
+                        # Correspondência estrita para perfis globais e flexível exata para perfis restritos
+                        if st.session_state.acesso_total:
+                            if sel_clean == ofic_row:
+                                orc_encontrado = converter_valor_pt(row[col_val])
                                 break
-                                
+                        else:
+                            if sel_clean == ofic_row or sel_clean in ofic_row or ofic_row in sel_clean:
+                                val_v = converter_valor_pt(row[col_val])
+                                if val_v > 0:
+                                    orc_encontrado = val_v
+                                    break
+                                    
                 orcamento_mensal = orc_encontrado
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
