@@ -507,20 +507,16 @@ else:
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação válidos ou os ficheiros estão vazios.")
         else:
-            # Coluna A = 0 (Oficina), Valores = Última ou penúltima coluna numérica, Data = Coluna de data detetada dinamicamente
             idx_ofic = 0
-            
-            # Detetar automaticamente a coluna de data e valor caso os índices fixos diferiram
             idx_val = 24 if df_fact_total.shape[1] > 24 else df_fact_total.shape[1] - 1
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
 
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
             
-            # Conversão ultra-robusta da Data (tenta detetar qualquer coluna com formato de data se a AC falhar)
+            # Conversão ultra-robusta da Data
             col_data_raw = df_fact_total.iloc[:, idx_data]
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
             if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
-                # Tenta procurar outra coluna que tenha datas válidas
                 for c_idx in range(df_fact_total.shape[1]):
                     parsed_test = pd.to_datetime(df_fact_total.iloc[:, c_idx], dayfirst=True, errors="coerce")
                     if parsed_test.notna().mean() > 0.5:
@@ -547,12 +543,16 @@ else:
             else:
                 df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
 
-            oficinas_disponiveis_fat = sorted(df_fact_total["Oficina_Agrupada"].unique().tolist())
+            # Limpeza e filtragem de opções válidas para o selectbox (removendo valores vazios ou asteriscos)
+            oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and not set(o.strip()).issubset({"*"})])
             if not df_orc.empty:
                 df_orc.columns = [str(c).strip() for c in df_orc.columns]
-                oficinas_orc_unicas = sorted(df_orc[df_orc.columns[0]].astype(str).str.strip().unique().tolist())
+                oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
+            if not oficinas_disponiveis_fat:
+                oficinas_disponiveis_fat = ["Geral"]
+
             col_sel_ofic, col_empty = st.columns([2, 2])
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
@@ -564,15 +564,19 @@ else:
 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
-            # Filtro flexível da oficina selecionada
-            df_oficina_fat = df_fact_total[
-                df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False) |
-                df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False)
-            ]
+            # Filtro ultra-seguro com regex=False para evitar erros com caracteres especiais
+            if sel_clean and not set(sel_clean).issubset({"*"}):
+                df_oficina_fat = df_fact_total[
+                    df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False) |
+                    df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)
+                ]
+            else:
+                df_oficina_fat = df_fact_total
+
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total
             
-            # Filtro estritamente pelo mês e ano selecionados (com fallback caso o ano no CSV venha diferente)
+            # Filtro estritamente pelo mês selecionado
             df_mes_ano = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado)]
             if not df_mes_ano.empty:
                 df_oficina_fat = df_mes_ano
@@ -674,10 +678,3 @@ else:
                 st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
                 st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
                 st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
-                
-            # Caixa expandida opcional de diagnóstico para validar se os dados carregaram corretamente
-            with st.expander("🔍 Diagnóstico de Faturação (Debug)"):
-                st.write(f"Total de registos no CSV: {len(df_fact_total)}")
-                st.write(f"Registos após filtro de oficina e mês: {len(df_oficina_fat)}")
-                if not df_fact_total.empty:
-                    st.dataframe(df_fact_total.head(3))
