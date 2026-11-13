@@ -674,6 +674,7 @@ else:
                                 pass
                                 
                     if mes_encontrado:
+                        # VALIDAÇÃO CRUCIAL: Se for Administrador (acesso_total), a correspondência tem de ser exata para evitar somas globais
                         if st.session_state.acesso_total:
                             if sel_clean == ofic_row:
                                 orc_encontrado = converter_valor_pt(row[col_val])
