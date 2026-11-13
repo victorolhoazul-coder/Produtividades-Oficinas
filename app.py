@@ -452,7 +452,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura universal e limpa dos ficheiros CSV de faturação
+        # 2. Leitura universal e flexível dos CSVs de faturação
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
@@ -476,12 +476,16 @@ else:
 
                     t_temp = pd.DataFrame()
                     file_bytes.seek(0)
-                    try:
-                        temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=5, on_bad_lines='skip')
-                        if len(temp_df.columns) > 1:
-                            t_temp = temp_df
-                    except Exception:
-                        pass
+                    
+                    for h_val in [5, 0, 4]:
+                        try:
+                            file_bytes.seek(0)
+                            temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=h_val, on_bad_lines='skip')
+                            if len(temp_df.columns) > 3:
+                                t_temp = temp_df
+                                break
+                        except Exception:
+                            pass
                     
                     if not t_temp.empty:
                         df_fact_total = pd.concat([df_fact_total, t_temp], ignore_index=True)
@@ -493,26 +497,22 @@ else:
         else:
             df_fact_total.columns = [str(c).strip() for c in df_fact_total.columns]
             
-            col_ofic = next((c for c in df_fact_total.columns if "OFICINA" in c.upper()), df_fact_total.columns[0])
-            col_val = next((c for c in df_fact_total.columns if "TOTAL" in c.upper() or "LIQ" in c.upper()), df_fact_total.columns[24] if len(df_fact_total.columns) > 24 else df_fact_total.columns[-1])
-            col_data = next((c for c in df_fact_total.columns if "DATA" in c.upper()), df_fact_total.columns[28] if len(df_fact_total.columns) > 28 else df_fact_total.columns[-2])
+            col_ofic = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["OFICINA", "LOCAL", "ESCO"])), df_fact_total.columns[0])
+            col_val = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["TOTAL", "LIQ", "VALOR", "IMPORT"])), df_fact_total.columns[-1])
+            col_data = next((c for c in df_fact_total.columns if any(k in c.upper() for k in ["DATA", "EMISS", "DIA"])), df_fact_total.columns[-2])
 
             df_fact_total["Oficina_CSV"] = df_fact_total[col_ofic].astype(str).str.strip()
             
-            # Limpeza de linhas inválidas
-            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None"]
+            invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan"]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.upper().isin(invalidos)]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.startswith("*")]
 
-            # Conversão da Data
-            col_data_raw = df_fact_total[col_data] if col_data in df_fact_total.columns else df_fact_total.iloc[:, 28]
+            col_data_raw = df_fact_total[col_data]
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
-            
-            if df_fact_total["Data_Parsed"].isna().mean() > 0.8:
+            if df_fact_total["Data_Parsed"].isna().mean() > 0.5:
                 df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, format="mixed", dayfirst=True, errors="coerce")
 
-            # Tratamento dos valores numéricos
-            col_valor_raw = df_fact_total[col_val] if col_val in df_fact_total.columns else df_fact_total.iloc[:, 24]
+            col_valor_raw = df_fact_total[col_val]
             if col_valor_raw.dtype == object:
                 s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
                 s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
@@ -520,7 +520,6 @@ else:
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
 
-            # 3. Mapeamento rigoroso baseado na tabela Agrupamento_oficinas
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
@@ -551,26 +550,14 @@ else:
 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
-            # Filtro exato por oficina selecionada
             mask_oficina = (
-                df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean
-            ) | (
-                df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean
+                df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False) |
+                df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)
             )
-            
             df_oficina_fat = df_fact_total[mask_oficina]
-            if df_oficina_fat.empty:
-                # Fallback para correspondência parcial se o nome diferir ligeiramente
-                mask_parcial = (
-                    df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False) |
-                    df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)
-                )
-                df_oficina_fat = df_fact_total[mask_parcial]
-            
             if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total
             
-            # Filtro estritamente pelo mês e ano selecionados
             df_mes_ano = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
             if not df_mes_ano.empty:
                 df_oficina_fat = df_mes_ano
@@ -590,7 +577,7 @@ else:
             df_completo_dias = pd.merge(df_completo_dias, df_diario, on="Data", how="left").fillna(0.0)
             df_completo_dias["Facturacao_Acumulada"] = df_completo_dias["Facturacao_Diaria"].cumsum()
             
-            # 4. ORÇAMENTO MENSAL ESPECÍFICO DA OFICINA SELECIONADA
+            # 4. ORÇAMENTO MENSAL DA OFICINA SELECIONADA
             orcamento_mensal = 0.0
             if not df_orc.empty and len(df_orc.columns) >= 5:
                 col_ofic_orc = df_orc.columns[0]
