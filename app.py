@@ -311,7 +311,13 @@ def padronizar_oficina_fat(nome):
         else:
             return f"Mecânica {cidade_encontrada.title()}"
             
-    return str(nome).strip()
+    # Limpa prefixos residuais do tipo "OF. " para evitar duplicados
+    limpo = str(nome).strip()
+    if limpo.upper().startswith("OF. "):
+        limpo = limpo[4:].strip()
+    elif limpo.upper().startswith("OF "):
+        limpo = limpo[3:].strip()
+    return limpo
 
 # ==========================================
 # CORPO PRINCIPAL
