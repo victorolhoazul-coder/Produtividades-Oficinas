@@ -281,6 +281,15 @@ def detetar_cidade(nome_oficina):
     if " MONTIJO" in u or u.endswith("MONTIJO") or "MONTIJO " in u: return "Montijo"
     return "Geral"
 
+def padronizar_oficina_fat(nome):
+    u = limpar_str(nome)
+    if "FARO" in u:
+        if "COLISAO" in u or "COLISÃO" in u:
+            return "Colisão Faro"
+        else:
+            return "Mecânica Faro"
+    return str(nome).strip()
+
 # ==========================================
 # CORPO PRINCIPAL
 # ==========================================
@@ -554,7 +563,7 @@ else:
             col_valor_raw = df_fact_total.iloc[:, idx_val]
             df_fact_total["Valor_Num"] = col_valor_raw.apply(converter_valor_pt)
 
-            df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
+            df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"].apply(padronizar_oficina_fat)
 
             oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
             if not df_orc.empty:
@@ -562,7 +571,6 @@ else:
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
-            # Se for utilizador restrito com agrupar = sim, usamos diretamente a lista da Coluna D
             if st.session_state.acesso_total:
                 oficinas_autorizadas_lista = oficinas_disponiveis_fat
             else:
@@ -582,7 +590,6 @@ else:
                 cidade_selecionada = st.selectbox("Selecionar Cidade:", options=cidades_autorizadas)
 
             if cidade_selecionada != "Geral":
-                # Se o perfil estiver agrupado (como o da dsa para Faro), respeitamos exatamente as oficinas desse agrupamento
                 if not st.session_state.acesso_total and st.session_state.agrupar_perfil and st.session_state.oficinas_agrupadas_perfil:
                     oficinas_filtradas_cidade = [o for o in st.session_state.oficinas_agrupadas_perfil if detetar_cidade(o) == cidade_selecionada or cidade_selecionada.upper() in o.upper()]
                 else:
@@ -727,27 +734,4 @@ else:
                 )
                 
                 linha_orc = base.mark_line(color='#f97316', strokeWidth=3).encode(
-                    y=alt.Y('Orcamento_Acumulado:Q', title='Orçamento Acumulado'),
-                    tooltip=[
-                        alt.Tooltip('Data_Str:N', title='Data'),
-                        alt.Tooltip('Orcamento_Acumulado:Q', title='Orçamento Acumulado', format=',.2f')
-                    ]
-                )
-                
-                chart = (barras + linha_orc).properties(height=420).interactive()
-                st.altair_chart(chart, use_container_width=True)
-                
-            with col_kpi:
-                st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.0f} €".replace(",", " "))
-                st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
-                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
-                
-                cor_desvio = "green" if desvio_orcamento >= 0 else "red"
-                desvio_formatado = f"{desvio_orcamento:,.0f} €".replace(",", " ")
-                
-                st.markdown(f"""
-                    <div style="font-size: 14px; font-weight: 600; color: rgb(49, 51, 63); margin-bottom: 0px;">DESVIO ORÇAMENTO</div>
-                    <div style="font-size: 24px; font-weight: 700; color: {cor_desvio}; margin-top: 0px; margin-bottom: 0px;">{desvio_formatado}</div>
-                """, unsafe_allow_html=True)
-                
-                st.metric(label="", value="", delta=f"{desvio_orcamento:,.0f} €".replace(",", " "), label_visibility="collapsed")
+                    y=alt.Y('Orcamento_Acumulado
