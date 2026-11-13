@@ -222,13 +222,12 @@ nome_arq_aus = f"Listagem de AusenciasPresenças_{sigla_mes}_{ano_corrente}.xlsx
 path_ausencias = nome_arq_aus if os.path.exists(nome_arq_aus) else None
 
 def converter_valor_pt(val_str):
-    """Converte corretamente o formato numérico português (ex: 9.966,27) para float de Python."""
+    """Trata corretamente o formato português (ex: 9.966,27 -> remove ponto de milhar e troca vírgula por ponto)."""
     if pd.isna(val_str):
         return 0.0
     s = str(val_str).replace("€", "").strip()
     if not s:
         return 0.0
-    # Remover pontos de milhar e trocar vírgula decimal por ponto
     if "," in s and "." in s:
         s = s.replace(".", "").replace(",", ".")
     elif "," in s:
@@ -511,8 +510,8 @@ else:
             st.warning("⚠️ Carregue os ficheiros CSV do Mapa de Faturação 1 e 2 na barra lateral.")
         else:
             idx_ofic = 0
-            idx_val = 26 if df_fact_total.shape[1] > 26 else df_fact_total.shape[1] - 3
-            idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
+            idx_val = 24  # Coluna Y (0-indexed: 24)
+            idx_data = 28 # Coluna AC (0-indexed: 28)
 
             df_fact_total["Oficina_CSV"] = df_fact_total.iloc[:, idx_ofic].astype(str).str.strip()
             
@@ -695,9 +694,9 @@ else:
                                     break
                                     
                             if len(partes) > 28:
-                                oficina_raw = partes[0]
-                                val_str = partes[26] if len(partes) > 26 else partes[-3]
-                                data_str = partes[28]
+                                oficina_raw = partes[0]  # Coluna A
+                                val_str = partes[24]     # Coluna Y
+                                data_str = partes[28]    # Coluna AC
                                 
                                 # Filtrar pelo mês e ano selecionados
                                 data_dt = pd.to_datetime(data_str, dayfirst=True, errors="coerce")
