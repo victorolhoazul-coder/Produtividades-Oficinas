@@ -544,7 +544,6 @@ else:
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
-            # FILTRAR RIGOROSAMENTE APENAS AS OFICINAS PERMITIDAS PARA O UTILIZADOR
             oficinas_autorizadas_lista = [o for o in oficinas_disponiveis_fat if oficina_permitida_check(o)]
             
             if not oficinas_autorizadas_lista:
@@ -558,8 +557,7 @@ else:
             
             df_oficina_fat = df_fact_total[
                 (df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean) |
-                (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean) |
-                (df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False))
+                (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean)
             ]
             
             df_mes_ano = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
@@ -613,11 +611,24 @@ else:
                 
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
                 
+                # Extrair a cidade principal (ex: "Beja", "Faro", "Évora", "Setúbal", "Portimão", "Sines") para correspondência exata do orçamento
+                cidade_alvo = ""
+                for cidade_keyword in ["BEJA", "EVORA", "ÉVORA", "FARO", "SETUBAL", "SETÚBAL", "PORTIMAO", "PORTIMÃO", "SINES", "ALMADA"]:
+                    if cidade_keyword in sel_clean:
+                        cidade_alvo = cidade_keyword
+                        break
+                
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
                     
-                    # Correspondência flexível para encontrar o orçamento da oficina selecionada
-                    if sel_clean in ofic_row or ofic_row in sel_clean or any(word in ofic_row for word in sel_clean.split() if len(word) > 3):
+                    # Correspondência exata por palavra-chave da cidade ou nome correspondente
+                    match_orcamento = False
+                    if cidade_alvo and cidade_alvo in ofic_row:
+                        match_orcamento = True
+                    elif sel_clean == ofic_row or sel_clean in ofic_row:
+                        match_orcamento = True
+                        
+                    if match_orcamento:
                         val_mes_cell = row[col_mes]
                         mes_encontrado = False
                         
@@ -637,8 +648,9 @@ else:
                         
                         if mes_encontrado:
                             val_raw = row[col_val]
-                            orcamento_mensal = converter_valor_pt(val_raw)
-                            if orcamento_mensal > 0:
+                            orc_val = converter_valor_pt(val_raw)
+                            if orc_val > 0:
+                                orcamento_mensal = orc_val
                                 break
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
