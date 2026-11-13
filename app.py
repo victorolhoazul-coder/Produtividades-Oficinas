@@ -673,7 +673,7 @@ else:
         lista_streams = [f for f in csv_fontes if f is not None]
         
         if not lista_streams:
-            arquivos_disco = glob.glob("*MOTOREX*.csv") + glob.glob("*MULTIAUTO*.csv") + glob.glob("*MAPA_FACTURAÇÃO*.csv") + glob.glob("*.csv")
+            arquivos_disco = glob.glob("*.csv")
             lista_streams = list(dict.fromkeys(arquivos_disco))
 
         for file_f in lista_streams:
