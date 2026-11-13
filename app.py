@@ -494,7 +494,6 @@ else:
             st.warning("⚠️ Carregue os ficheiros CSV do Mapa de Faturação 1 e 2 na barra lateral.")
         else:
             idx_ofic = 0
-            # Ajuste dinâmico ou índice correto para o valor faturado (geralmente penúltima ou antepenúltima coluna com números)
             idx_val = 26 if df_fact_total.shape[1] > 26 else df_fact_total.shape[1] - 3
             idx_data = 28 if df_fact_total.shape[1] > 28 else df_fact_total.shape[1] - 2
 
@@ -652,8 +651,8 @@ else:
                 st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
 
     elif modulo_selecionado == "🧪 Teste Isolado Faturação (CSV)":
-        st.subheader("🧪 Resumo de Faturação por Oficina (Direto da Coluna A)")
-        st.caption("Apresenta o valor total faturado acumulado por oficina exatamente como vem na Coluna A dos ficheiros CSV, sem agrupamentos.")
+        st.subheader("🧪 Resumo de Faturação por Oficina (Total Bruto do Ficheiro)")
+        st.caption("Apresenta o valor total acumulado por oficina de todo o ficheiro CSV, sem filtros de data.")
         
         csv_fontes_teste = [file_fact1_up, file_fact2_up]
         
@@ -693,8 +692,8 @@ else:
                                     
                             if len(partes) > 25:
                                 oficina_raw = partes[0]
-                                # Vamos usar a coluna correta onde está a faturação (índice 26 ou última coluna monetária)
-                                val_str = partes[26] if len(partes) > 26 else partes[-2]
+                                # Testar índice 24, 25, 26 ou última coluna para encontrar a faturação real
+                                val_str = partes[26] if len(partes) > 26 else partes[24]
                                 
                                 val_clean = str(val_str).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
                                 try:
