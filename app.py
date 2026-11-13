@@ -269,16 +269,17 @@ def oficina_permitida_check(oficina_nome):
     return False
 
 def detetar_cidade(nome_oficina):
-    u = nome_oficina.upper()
-    if "BEJA" in u: return "Beja"
-    if "FARO" in u: return "Faro"
-    if "EVORA" in u or "ÉVORA" in u: return "Évora"
-    if "PORTIMAO" in u or "PORTIMÃO" in u: return "Portimão"
-    if "SETUBAL" in u or "SETÚBAL" in u: return "Setúbal"
-    if "SINES" in u: return "Sines"
-    if "ALMADA" in u: return "Almada"
-    if "PALMELA" in u: return "Palmela"
-    if "MONTIJO" in u: return "Montijo"
+    u = limpar_str(nome_oficina)
+    # Verificação precisa para evitar falsos positivos
+    if " BEJA" in u or u.endswith("BEJA") or "BEJA " in u: return "Beja"
+    if " FARO" in u or u.endswith("FARO") or "FARO " in u: return "Faro"
+    if " EVORA" in u or u.endswith("EVORA") or "EVORA " in u or "ÉVORA" in u: return "Évora"
+    if " PORTIMAO" in u or u.endswith("PORTIMAO") or "PORTIMÃO" in u: return "Portimão"
+    if " SETUBAL" in u or u.endswith("SETUBAL") or "SETÚBAL" in u: return "Setúbal"
+    if " SINES" in u or u.endswith("SINES") or "SINES " in u: return "Sines"
+    if " ALMADA" in u or u.endswith("ALMADA") or "ALMADA " in u: return "Almada"
+    if " PALMELA" in u or u.endswith("PALMELA") or "PALMELA " in u: return "Palmela"
+    if " MONTIJO" in u or u.endswith("MONTIJO") or "MONTIJO " in u: return "Montijo"
     return "Geral"
 
 # ==========================================
@@ -581,9 +582,9 @@ else:
                 cidade_selecionada = st.selectbox("Selecionar Cidade:", options=cidades_autorizadas)
 
             if cidade_selecionada != "Geral":
-                oficinas_filtradas_cidade = [o for o in oficinas_autorizadas_lista if cidade_selecionada.upper() in o.upper()]
+                oficinas_filtradas_cidade = [o for o in oficinas_autorizadas_lista if detetar_cidade(o) == cidade_selecionada]
                 if not oficinas_filtradas_cidade:
-                    oficinas_filtradas_cidade = oficinas_autorizadas_lista
+                    oficinas_filtradas_cidade = [o for o in oficinas_autorizadas_lista if cidade_selecionada.upper() in o.upper()]
             else:
                 oficinas_filtradas_cidade = oficinas_autorizadas_lista
 
@@ -674,7 +675,6 @@ else:
                                 pass
                                 
                     if mes_encontrado:
-                        # VERIFICAÇÃO RIGOROSA PARA O ADMIN (VAZUL)
                         if st.session_state.acesso_total:
                             if sel_clean == ofic_row:
                                 orc_encontrado = converter_valor_pt(row[col_val])
