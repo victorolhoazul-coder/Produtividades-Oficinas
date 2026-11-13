@@ -452,7 +452,7 @@ else:
             except Exception as e:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
-        # 2. Leitura robusta do CSV com header=None para evitar corromper as linhas de dados
+        # 2. Leitura universal e blindada dos CSVs carregados via upload ou disco
         df_fact_total = pd.DataFrame()
         csv_fontes = [file_fact1_up, file_fact2_up]
         
@@ -474,34 +474,38 @@ else:
                     else:
                         file_bytes = file_f
 
-                    file_bytes.seek(0)
-                    temp_df = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
-                    if not temp_df.empty and len(temp_df.columns) > 2:
-                        df_fact_total = pd.concat([df_fact_total, temp_df], ignore_index=True)
+                    # Testa leitura com separador automático (vírgula ou ponto e vírgula) sem cabeçalho fixo
+                    for sep_val in [None, ';', ',']:
+                        try:
+                            file_bytes.seek(0)
+                            temp_df = pd.read_csv(file_bytes, sep=sep_val, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
+                            if not temp_df.empty and len(temp_df.columns) > 2:
+                                df_fact_total = pd.concat([df_fact_total, temp_df], ignore_index=True)
+                                break
+                        except Exception:
+                            pass
                 except Exception:
                     pass
                 
         if df_fact_total.empty:
             st.warning("⚠️ Não foram encontrados mapas de faturação válidos ou os ficheiros estão vazios.")
         else:
-            # Deteção automática inteligente das colunas de Oficina, Data e Valor inspecionando o conteúdo
+            # Deteção automática inteligente das colunas de Oficina, Data e Valor
             col_ofic_idx = 0
             col_data_idx = -1
             col_val_idx = -1
 
-            # Procura qual a coluna que tem datas válidas e qual tem valores numéricos
             for col in df_fact_total.columns:
                 parsed_dates = pd.to_datetime(df_fact_total[col], dayfirst=True, errors='coerce')
-                if parsed_dates.notna().mean() > 0.15:  # Se mais de 15% das linhas forem datas válidas
+                if parsed_dates.notna().mean() > 0.1:
                     col_data_idx = col
                     break
 
-            # Procura a coluna de valores numéricos mais à direita ou com ponto/vírgula
             for col in reversed(df_fact_total.columns):
                 if col != col_data_idx:
                     sample_vals = df_fact_total[col].astype(str).str.replace('€', '').str.strip()
                     numeric_check = pd.to_numeric(sample_vals.str.replace('.', '', regex=False).str.replace(',', '.', regex=False), errors='coerce')
-                    if numeric_check.notna().mean() > 0.15:
+                    if numeric_check.notna().mean() > 0.1:
                         col_val_idx = col
                         break
 
@@ -512,22 +516,18 @@ else:
 
             df_fact_total["Oficina_CSV"] = df_fact_total[col_ofic_idx].astype(str).str.strip()
             
-            # Remove linhas de cabeçalho repetidas, totais ou vazias
             invalidos = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "None", "nan", "SUBTOTAL", "OFICINA"]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.upper().isin(invalidos)]
             df_fact_total = df_fact_total[~df_fact_total["Oficina_CSV"].str.startswith("*")]
 
-            # Conversão de Datas
             col_data_raw = df_fact_total[col_data_idx]
             df_fact_total["Data_Parsed"] = pd.to_datetime(col_data_raw, dayfirst=True, errors="coerce")
 
-            # Conversão de Valores
             col_valor_raw = df_fact_total[col_val_idx]
             s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
             s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
             df_fact_total["Valor_Num"] = pd.to_numeric(s_clean, errors="coerce").fillna(0.0)
 
-            # Mapeamento com Agrupamento de Oficinas
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
