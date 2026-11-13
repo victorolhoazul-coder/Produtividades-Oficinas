@@ -464,7 +464,6 @@ else:
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
                     elif hasattr(file_f, "read"):
-                        file_f.seek(0)
                         file_bytes = io.BytesIO(file_f.read())
                     else:
                         file_bytes = file_f
@@ -508,6 +507,7 @@ else:
             else:
                 df_fact_total["Valor_Num"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
 
+            # Mapeamento estrito usando a folha 'Agrupamento_oficinas' sem misturar sucursais indesejadas
             if not df_agrup.empty:
                 df_agrup.columns = [str(c).strip() for c in df_agrup.columns]
                 col_agrup_oficina = df_agrup.columns[0]
@@ -538,12 +538,16 @@ else:
 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
+            # Filtro exato para evitar somar sucursais por aproximação de texto ambígua
             df_oficina_fat = df_fact_total[
-                df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False) |
-                df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)
+                (df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean) |
+                (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean)
             ]
             if df_oficina_fat.empty:
-                df_oficina_fat = df_fact_total
+                df_oficina_fat = df_fact_total[
+                    df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False) |
+                    df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)
+                ]
             
             df_mes_ano = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
             if not df_mes_ano.empty:
@@ -575,7 +579,7 @@ else:
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
                     
-                    if sel_clean in ofic_row or ofic_row in sel_clean:
+                    if sel_clean == ofic_row or sel_clean in ofic_row:
                         val_mes_cell = row[col_mes]
                         mes_encontrado = False
                         
@@ -676,20 +680,19 @@ else:
                             if not linha_strip:
                                 continue
                                 
-                            # Tentar detetar o separador correto (ponto e vírgula, tabulação ou vírgula)
                             partes = []
                             for sep in [";", "\t", ","]:
                                 p = [x.strip().replace('"', '') for x in linha_strip.split(sep)]
-                                if len(p) > 10:  # Linha válida com colunas suficientes
+                                if len(p) > 10:
                                     partes = p
                                     break
                                     
                             if len(partes) > 24:
                                 oficina = partes[0]
-                                val_str = partes[24] # Coluna Y (índice 24)
+                                val_str = partes[24]
                                 
-                                # Limpeza e conversão rigorosa do valor numérico português
-                                val_clean = val_str.replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+                                val_clean = val_str.replace("€", "", regex=False) if hasattr(val_str, 'replace') else val_str
+                                val_clean = str(val_str).replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
                                 try:
                                     valor = float(val_clean)
                                     if valor > 0 and oficina.upper() not in ["", "NAN", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "ANO :", "MÊS :"] and not oficina.startswith("*"):
