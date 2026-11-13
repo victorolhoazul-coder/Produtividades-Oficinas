@@ -238,6 +238,15 @@ def converter_valor_pt(val_str):
     except:
         return 0.0
 
+def oficina_permitida_check(oficina_nome):
+    if st.session_state.acesso_total:
+        return True
+    oficina_up = str(oficina_nome).upper()
+    for permitida in st.session_state.oficinas_autorizadas:
+        if permitida in oficina_up or oficina_up in permitida:
+            return True
+    return False
+
 # ==========================================
 # CORPO PRINCIPAL
 # ==========================================
@@ -394,14 +403,7 @@ else:
         df_sem_prod_final = pd.DataFrame(linhas_sem_produtivo)
         df_completo = pd.concat([df_exibicao_tecnicos, df_sem_prod_final], ignore_index=True) if not df_sem_prod_final.empty else df_exibicao_tecnicos
 
-        if not st.session_state.acesso_total:
-            def oficina_permitida(oficina):
-                oficina_up = str(oficina).upper()
-                for permitida in st.session_state.oficinas_autorizadas:
-                    if permitida in oficina_up or oficina_up in permitida:
-                        return True
-                return False
-            df_completo = df_completo[df_completo["Oficina"].apply(oficina_permitida)]
+        df_completo = df_completo[df_completo["Oficina"].apply(oficina_permitida_check)]
 
         with container_filtros:
             st.header("Filtros")
@@ -473,17 +475,13 @@ else:
                 st.error(f"Erro ao ler o ficheiro de orçamentos: {e}")
         
         df_fact_total = pd.DataFrame()
-        
-        # 1. Tentar ler ficheiros carregados manualmente pelo admin
         csv_fontes = [file_fact1_up, file_fact2_up]
         
-        # 2. Se não houver ficheiros carregados, procurar automaticamente por CSVs na pasta do repositório (ex: MULTIAUTO...)
         if all(f is None for f in csv_fontes):
             arquivos_csv_pasta = glob.glob("*.csv")
             for arq in arquivos_csv_pasta:
                 if "MULTIAUTO" in arq.upper() or "FACTURACAO" in arq.upper() or "MAPA" in arq.upper():
                     csv_fontes.append(arq)
-            # Se mesmo assim não encontrar com filtro, apanhar todos os CSVs disponíveis na pasta
             if not csv_fontes or all(f is None for f in csv_fontes):
                 csv_fontes = arquivos_csv_pasta
 
@@ -493,9 +491,9 @@ else:
                     if hasattr(file_f, "getvalue"):
                         file_bytes = io.BytesIO(file_f.getvalue())
                     elif hasattr(file_f, "read"):
-                        file_bytes = io.BytesIO(file_f.read())
+                        file_bytes = file_f.read()
                     else:
-                        file_bytes = file_f  # É um caminho de string (arquivo local)
+                        file_bytes = file_f
 
                     if hasattr(file_bytes, "seek"):
                         file_bytes.seek(0)
@@ -522,7 +520,7 @@ else:
                     pass
                 
         if df_fact_total.empty:
-            st.warning("⚠️ Não foram encontrados ficheiros CSV de faturação na pasta do repositório nem carregados na barra lateral. Certifique-se de que os ficheiros CSV estão no GitHub.")
+            st.warning("⚠️ Não foram encontrados ficheiros CSV de faturação na pasta do repositório.")
         else:
             idx_ofic = 0   # Coluna A
             idx_val = 24   # Coluna Y (Total Liqu)
@@ -550,18 +548,21 @@ else:
             else:
                 df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
 
+            # FILTRAR OFICINAS PERMITIDAS PARA O UTILIZADOR ATUAL
             oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
             if not df_orc.empty:
                 df_orc.columns = [str(c).strip() for c in df_orc.columns]
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
-            if not oficinas_disponiveis_fat:
-                oficinas_disponiveis_fat = ["Geral"]
+            oficinas_autorizadas_lista = [o for o in oficinas_disponiveis_fat if oficina_permitida_check(o)]
+            
+            if not oficinas_autorizadas_lista:
+                oficinas_autorizadas_lista = ["Sem acesso"]
 
             col_sel_ofic, col_empty = st.columns([2, 2])
             with col_sel_ofic:
-                oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_disponiveis_fat)
+                oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_autorizadas_lista)
                 
             def limpar_str(s):
                 if pd.isna(s): return ""
