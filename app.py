@@ -674,6 +674,7 @@ else:
                         if hasattr(file_f, "getvalue"):
                             file_bytes = io.BytesIO(file_f.getvalue())
                         elif hasattr(file_f, "read"):
+                            file_f.seek(0)
                             file_bytes = io.BytesIO(file_f.read())
                         elif isinstance(file_f, str):
                             with open(file_f, "rb") as f_in:
@@ -682,28 +683,34 @@ else:
                             file_bytes = file_f
 
                         file_bytes.seek(0)
-                        # Leitura sem header fixo para inspecionar e tratar todas as linhas
-                        t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", header=None, on_bad_lines='skip')
-                        if not t_temp.empty:
+                        t_temp = pd.read_csv(file_bytes, sep=None, engine="python", encoding="iso-8859-1", skiprows=3, header=0, on_bad_lines='skip')
+                        if not t_temp.empty and len(t_temp.columns) > 1:
                             df_teste = pd.concat([df_teste, t_temp], ignore_index=True)
                     except Exception as e:
                         pass
                         
             if df_teste.empty:
-                st.warning("⚠️ Os ficheiros CSV estão vazios.")
+                st.warning("⚠️ Os ficheiros CSV estão vazios ou o formato não foi reconhecido.")
             else:
-                # Extrair oficina (coluna 0) e valor (última coluna ou coluna 24)
-                df_teste["Oficina"] = df_teste.iloc[:, 0].astype(str).str.strip()
+                # Detetar automaticamente a coluna do nome da oficina e a coluna do valor
+                col_ofic_csv = df_teste.columns[0]
                 
-                # Remover linhas de cabeçalho, rodapé e asteriscos
+                # Procurar uma coluna numérica ou a penúltima/última coluna para o valor
+                candidatos_valor = [c for c in df_teste.columns if any(term in str(c).upper() for term in ["VALOR", "TOTAL", "FACTURADO", "QUANTIA"])]
+                if candidatos_valor:
+                    col_val_csv = candidatos_valor[-1]
+                else:
+                    col_val_csv = df_teste.columns[24] if len(df_teste.columns) > 24 else df_teste.columns[-1]
+
+                df_teste["Oficina"] = df_teste[col_ofic_csv].astype(str).str.strip()
+                
+                # Limpar linhas de cabeçalho e rodapé indesejadas
                 excluir = ["NAN", "", "TOTAL", "MAPA DE FACTURAÇÃO", "NONE", "NAN", "ANO :"]
                 df_filtrado = df_teste[~df_teste["Oficina"].str.upper().apply(lambda x: any(ex in x for ex in excluir))]
                 df_filtrado = df_filtrado[~df_filtrado["Oficina"].str.startswith("*")]
                 df_filtrado = df_filtrado[df_filtrado["Oficina"].notna() & (df_filtrado["Oficina"] != "")]
 
-                idx_val = 24 if df_filtrado.shape[1] > 24 else df_filtrado.shape[1] - 1
-                col_valor_raw = df_filtrado.iloc[:, idx_val]
-                
+                col_valor_raw = df_filtrado[col_val_csv]
                 if col_valor_raw.dtype == object:
                     s_clean = col_valor_raw.astype(str).str.replace("€", "", regex=False).str.strip()
                     s_clean = s_clean.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
@@ -711,13 +718,11 @@ else:
                 else:
                     df_filtrado["Valor"] = pd.to_numeric(col_valor_raw, errors="coerce").fillna(0.0)
                     
-                # Agrupar por oficina exatamente igual à folha de cálculo
                 df_resumo = df_filtrado.groupby("Oficina", as_index=False)["Valor"].sum()
                 df_resumo = df_resumo[df_resumo["Valor"] > 0]
                 df_resumo.rename(columns={"Oficina": "Oficina", "Valor": "Total Faturado"}, inplace=True)
                 df_resumo = df_resumo.sort_values(by="Total Faturado", ascending=False)
                 
-                # Adicionar linha de Total Geral no fim
                 total_geral = df_resumo["Total Faturado"].sum()
                 linha_total_df = pd.DataFrame([{"Oficina": "TOTAL MOTORPOR", "Total Faturado": total_geral}])
                 df_resumo = pd.concat([df_resumo, linha_total_df], ignore_index=True)
