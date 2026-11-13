@@ -238,12 +238,18 @@ def converter_valor_pt(val_str):
     except:
         return 0.0
 
+def limpar_str(s):
+    if pd.isna(s): return ""
+    s_nfkd = unicodedata.normalize('NFKD', str(s))
+    return "".join([c for c in s_nfkd if not unicodedata.combining(c)]).upper().strip()
+
 def oficina_permitida_check(oficina_nome):
     if st.session_state.acesso_total:
         return True
-    oficina_up = str(oficina_nome).upper()
+    oficina_up = limpar_str(oficina_nome)
     for permitida in st.session_state.oficinas_autorizadas:
-        if permitida in oficina_up or oficina_up in permitida:
+        p_clean = limpar_str(permitida)
+        if p_clean in oficina_up or oficina_up in p_clean:
             return True
     return False
 
@@ -289,12 +295,6 @@ else:
         oficinas_oficiais = df_mecanicos["Oficina"].unique().tolist()
         dict_oficina_local = dict(zip(df_mecanicos["Oficina"].str.upper(), df_mecanicos["Local"]))
 
-        oficina_portimao_oficial = "MECÂNICA PORTIMÃO"
-        for o in oficinas_oficiais:
-            if "PORTIMÃO" in o.upper() or "PORTIMAO" in o.upper():
-                oficina_portimao_oficial = o
-                break
-
         def normalizar_oficina(nome_oficina):
             if pd.isna(nome_oficina):
                 return "Geral"
@@ -305,22 +305,12 @@ else:
                 if oficina_oficial.upper() == nome_upper:
                     return oficina_oficial
                     
-            if "BEJA" in nome_upper:
-                return "MECÂNICA BEJA"
-            if "PORTIMÃO" in nome_upper or "PORTIMAO" in nome_upper:
-                return oficina_portimao_oficial
-            if "FARO" in nome_upper:
-                for o in oficinas_oficiais:
-                    if "FARO" in o.upper(): return o
-            if "ÉVORA" in nome_upper or "EVORA" in nome_upper:
-                for o in oficinas_oficiais:
-                    if "ÉVORA" in o.upper() or "EVORA" in o.upper(): return o
-            if "SETÚBAL" in nome_upper or "SETUBAL" in nome_upper:
-                for o in oficinas_oficiais:
-                    if "SETÚBAL" in o.upper() or "SETUBAL" in o.upper(): return o
-            if "SINES" in nome_upper:
-                for o in oficinas_oficiais:
-                    if "SINES" in nome_upper: return o
+            if "BEJA" in nome_upper: return "MECÂNICA BEJA"
+            if "PORTIMÃO" in nome_upper or "PORTIMAO" in nome_upper: return "MECÂNICA PORTIMÃO"
+            if "FARO" in nome_upper: return "MECÂNICA FARO"
+            if "ÉVORA" in nome_upper or "EVORA" in nome_upper: return "MECÂNICA ÉVORA"
+            if "SETÚBAL" in nome_upper or "SETUBAL" in nome_upper: return "MECÂNICA SETÚBAL"
+            if "SINES" in nome_upper: return "MECÂNICA SINES"
             return nome_str
 
         candidatos_op = ["Operário", "Operario", "Técnico", "Tecnico", "Nome", "Mecânico", "Mecanico"]
@@ -548,13 +538,13 @@ else:
             else:
                 df_fact_total["Oficina_Agrupada"] = df_fact_total["Oficina_CSV"]
 
-            # FILTRAR OFICINAS PERMITIDAS PARA O UTILIZADOR ATUAL
             oficinas_disponiveis_fat = sorted([o for o in df_fact_total["Oficina_Agrupada"].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
             if not df_orc.empty:
                 df_orc.columns = [str(c).strip() for c in df_orc.columns]
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
+            # FILTRAR RIGOROSAMENTE APENAS AS OFICINAS PERMITIDAS PARA O UTILIZADOR
             oficinas_autorizadas_lista = [o for o in oficinas_disponiveis_fat if oficina_permitida_check(o)]
             
             if not oficinas_autorizadas_lista:
@@ -564,16 +554,12 @@ else:
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_autorizadas_lista)
                 
-            def limpar_str(s):
-                if pd.isna(s): return ""
-                s_nfkd = unicodedata.normalize('NFKD', str(s))
-                return "".join([c for c in s_nfkd if not unicodedata.combining(c)]).upper().strip()
-
             sel_clean = limpar_str(oficina_selecionada_fat)
             
             df_oficina_fat = df_fact_total[
                 (df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean) |
-                (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean)
+                (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean) |
+                (df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False))
             ]
             
             df_mes_ano = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
@@ -630,7 +616,8 @@ else:
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
                     
-                    if sel_clean == ofic_row:
+                    # Correspondência flexível para encontrar o orçamento da oficina selecionada
+                    if sel_clean in ofic_row or ofic_row in sel_clean or any(word in ofic_row for word in sel_clean.split() if len(word) > 3):
                         val_mes_cell = row[col_mes]
                         mes_encontrado = False
                         
