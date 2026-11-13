@@ -249,6 +249,7 @@ def oficina_permitida_check(oficina_nome):
     oficina_up = limpar_str(oficina_nome)
     for permitida in st.session_state.oficinas_autorizadas:
         p_clean = limpar_str(permitida)
+        # Correspondência estrita ou por inclusão exata com as oficinas do perfil
         if p_clean == oficina_up or p_clean in oficina_up or oficina_up in p_clean:
             return True
     return False
@@ -549,9 +550,35 @@ else:
             if not oficinas_autorizadas_lista:
                 oficinas_autorizadas_lista = ["Sem acesso"]
 
-            col_sel_ofic, col_empty = st.columns([2, 2])
+            # Caixa com a Cidade e Caixa de Seleção da Oficina
+            col_sel_cidade, col_sel_ofic = st.columns(2)
+            
+            # Determinar cidades disponíveis com base nas oficinas autorizadas
+            cidades_autorizadas = []
+            if not df_agrup.empty and len(df_agrup.columns) >= 3:
+                col_cidade_agrup = df_agrup.columns[2] # Coluna CIDADE
+                dict_cidade = dict(zip(df_agrup[col_agrup_oficina].astype(str).str.strip().str.upper(), df_agrup[col_cidade_agrup].astype(str).str.strip()))
+                cidades_autorizadas = sorted(list(set([dict_cidade.get(o.upper(), "Geral") for o in oficinas_autorizadas_lista])))
+            else:
+                cidades_autorizadas = ["Geral", "Beja", "Évora", "Portimão", "Faro", "Setúbal", "Sines"]
+
+            with col_sel_cidade:
+                cidade_selecionada = st.selectbox("Selecionar Cidade:", options=cidades_autorizadas)
+
+            # Filtrar oficinas autorizadas pela cidade selecionada
+            if cidade_selecionada != "Geral":
+                oficinas_filtradas_cidade = []
+                for o in oficinas_autorizadas_lista:
+                    c_oficina = dict_cidade.get(o.upper(), "").upper() if 'dict_cidade' in locals() else ""
+                    if cidade_selecionada.upper() in c_oficina or cidade_selecionada.upper() in o.upper():
+                        oficinas_filtradas_cidade.append(o)
+                if not oficinas_filtradas_cidade:
+                    oficinas_filtradas_cidade = oficinas_autorizadas_lista
+            else:
+                oficinas_filtradas_cidade = oficinas_autorizadas_lista
+
             with col_sel_ofic:
-                oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_autorizadas_lista)
+                oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_filtradas_cidade)
                 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
@@ -636,7 +663,6 @@ else:
                                 pass
                                 
                     if mes_encontrado:
-                        # Correspondência estrita para perfis globais e flexível exata para perfis restritos
                         if st.session_state.acesso_total:
                             if sel_clean == ofic_row:
                                 orc_encontrado = converter_valor_pt(row[col_val])
