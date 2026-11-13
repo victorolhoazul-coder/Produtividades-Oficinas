@@ -249,8 +249,14 @@ def oficina_permitida_check(oficina_nome):
     oficina_up = limpar_str(oficina_nome)
     for permitida in st.session_state.oficinas_autorizadas:
         p_clean = limpar_str(permitida)
-        # Verificação rigorosa: a permissão tem de estar contida exatamente no nome da oficina ou vice-versa
-        if p_clean == oficina_up or p_clean in oficina_up:
+        # Identificar cidade principal para associar corretamente (ex: "Beja" casa com "Colisão Beja" ou "Mecânica Beja")
+        cidades = ["BEJA", "EVORA", "ÉVORA", "FARO", "SETUBAL", "SETÚBAL", "PORTIMAO", "PORTIMÃO", "SINES", "ALMADA"]
+        cidade_encontrada = next((c for c in cidades if c in p_clean or c in oficina_up), None)
+        
+        if cidade_encontrada:
+            if cidade_encontrada in oficina_up and cidade_encontrada in p_clean:
+                return True
+        elif p_clean in oficina_up or oficina_up in p_clean:
             return True
     return False
 
@@ -545,7 +551,6 @@ else:
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
-            # FILTRAR RIGOROSAMENTE APENAS AS OFICINAS PERMITIDAS PARA O UTILIZADOR
             oficinas_autorizadas_lista = [o for o in oficinas_disponiveis_fat if oficina_permitida_check(o)]
             
             if not oficinas_autorizadas_lista:
@@ -613,11 +618,20 @@ else:
                 
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
                 
+                # Extrair cidade principal para mapear com segurança o orçamento (ex: "Beja" liga "Colisão Beja" a "Mecânica Beja")
+                cidades_keywords = ["BEJA", "EVORA", "ÉVORA", "FARO", "SETUBAL", "SETÚBAL", "PORTIMAO", "PORTIMÃO", "SINES", "ALMADA"]
+                cidade_selecionada_key = next((c for c in cidades_keywords if c in sel_clean), sel_clean)
+                
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
                     
-                    # Correspondência exata e segura da linha do orçamento
-                    if sel_clean == ofic_row or ofic_row in sel_clean or sel_clean in ofic_row:
+                    match_orc = False
+                    if cidade_selecionada_key in ofic_row:
+                        match_orc = True
+                    elif sel_clean in ofic_row or ofic_row in sel_clean:
+                        match_orc = True
+                        
+                    if match_orc:
                         val_mes_cell = row[col_mes]
                         mes_encontrado = False
                         
