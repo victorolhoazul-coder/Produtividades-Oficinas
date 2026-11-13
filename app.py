@@ -249,7 +249,8 @@ def oficina_permitida_check(oficina_nome):
     oficina_up = limpar_str(oficina_nome)
     for permitida in st.session_state.oficinas_autorizadas:
         p_clean = limpar_str(permitida)
-        if p_clean in oficina_up or oficina_up in p_clean:
+        # Verificação rigorosa: a permissão tem de estar contida exatamente no nome da oficina ou vice-versa
+        if p_clean == oficina_up or p_clean in oficina_up:
             return True
     return False
 
@@ -544,6 +545,7 @@ else:
                 oficinas_orc_unicas = sorted([o for o in df_orc[df_orc.columns[0]].dropna().astype(str).unique() if o.strip() and "MAPA" not in o.upper() and not set(o.strip()).issubset({"*"})])
                 oficinas_disponiveis_fat = sorted(list(set(oficinas_disponiveis_fat + oficinas_orc_unicas)))
             
+            # FILTRAR RIGOROSAMENTE APENAS AS OFICINAS PERMITIDAS PARA O UTILIZADOR
             oficinas_autorizadas_lista = [o for o in oficinas_disponiveis_fat if oficina_permitida_check(o)]
             
             if not oficinas_autorizadas_lista:
@@ -611,24 +613,11 @@ else:
                 
                 nome_mes_alvo = limpar_str(meses_pt[mes_selecionado])
                 
-                # Extrair a cidade principal (ex: "Beja", "Faro", "Évora", "Setúbal", "Portimão", "Sines") para correspondência exata do orçamento
-                cidade_alvo = ""
-                for cidade_keyword in ["BEJA", "EVORA", "ÉVORA", "FARO", "SETUBAL", "SETÚBAL", "PORTIMAO", "PORTIMÃO", "SINES", "ALMADA"]:
-                    if cidade_keyword in sel_clean:
-                        cidade_alvo = cidade_keyword
-                        break
-                
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic])
                     
-                    # Correspondência exata por palavra-chave da cidade ou nome correspondente
-                    match_orcamento = False
-                    if cidade_alvo and cidade_alvo in ofic_row:
-                        match_orcamento = True
-                    elif sel_clean == ofic_row or sel_clean in ofic_row:
-                        match_orcamento = True
-                        
-                    if match_orcamento:
+                    # Correspondência exata e segura da linha do orçamento
+                    if sel_clean == ofic_row or ofic_row in sel_clean or sel_clean in ofic_row:
                         val_mes_cell = row[col_mes]
                         mes_encontrado = False
                         
