@@ -548,20 +548,16 @@ else:
 
             sel_clean = limpar_str(oficina_selecionada_fat)
             
-            # Filtro robusto para apanhar correspondência por palavras-chave (ex: "COLISAO" e "BEJA")
+            # Filtro flexível e seguro: tenta encontrar por correspondência exata ou parcial, sem nunca devolver dataframe vazio se houver dados
             if sel_clean and sel_clean != "GERAL":
-                palavras_chave = [p for p in sel_clean.split() if len(p) > 2]
-                if palavras_chave:
-                    mask = df_fact_total["Oficina_Agrupada"].apply(limpar_str).apply(lambda x: all(k in x for k in palavras_chave))
-                    if not mask.any():
-                        mask = df_fact_total["Oficina_CSV"].apply(limpar_str).apply(lambda x: all(k in x for k in palavras_chave))
-                    df_oficina_fat = df_fact_total[mask]
-                else:
-                    df_oficina_fat = df_fact_total[df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean]
+                mask = (df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean) | \
+                       (df_fact_total["Oficina_CSV"].apply(limpar_str) == sel_clean) | \
+                       (df_fact_total["Oficina_Agrupada"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False)) | \
+                       (df_fact_total["Oficina_CSV"].apply(limpar_str).str.contains(sel_clean, na=False, regex=False))
+                df_oficina_fat = df_fact_total[mask]
+                if df_oficina_fat.empty:
+                    df_oficina_fat = df_fact_total
             else:
-                df_oficina_fat = df_fact_total
-
-            if df_oficina_fat.empty:
                 df_oficina_fat = df_fact_total
             
             # Filtro estritamente pelo mês e ano selecionados
@@ -596,7 +592,7 @@ else:
                 for _, row in df_orc.iterrows():
                     ofic_row = limpar_str(row[col_ofic_orc])
                     
-                    if sel_clean in ofic_row or ofic_row in sel_clean or all(k in ofic_row for k in sel_clean.split() if len(k) > 2):
+                    if sel_clean in ofic_row or ofic_row in sel_clean:
                         val_mes_cell = row[col_mes_orc]
                         mes_encontrado = False
                         
@@ -642,3 +638,27 @@ else:
             desvio_orcamento = facturacao_a_data - orcamento_mensal
             
             col_graf, col_kpi = st.columns([3, 1])
+            
+            with col_graf:
+                base = alt.Chart(df_completo_dias).encode(
+                    x=alt.X('Data:T', title='Data', axis=alt.Axis(format='%d/%m/%Y', labelAngle=-45))
+                )
+                
+                barras = base.mark_bar(color='#115e59').encode(
+                    y=alt.Y('Facturacao_Acumulada:Q', title='Valor (€)'),
+                    tooltip=['Data', 'Facturacao_Diaria', 'Facturacao_Acumulada']
+                )
+                
+                linha_orc = base.mark_line(color='#f97316', strokeWidth=3).encode(
+                    y='Orcamento_Acumulado:Q',
+                    tooltip=['Data', 'Orcamento_Acumulado']
+                )
+                
+                chart = (barras + linha_orc).properties(height=400).interactive()
+                st.altair_chart(chart, use_container_width=True)
+                
+            with col_kpi:
+                st.metric(label="ORÇAMENTO MENSAL", value=f"{orcamento_mensal:,.0f} €".replace(",", " "))
+                st.metric(label="ORÇAMENTO DIÁRIO", value=f"{orcamento_diario:,.0f} €".replace(",", " "))
+                st.metric(label="FATURAÇÃO À DATA", value=f"{facturacao_a_data:,.0f} €".replace(",", " "))
+                st.metric(label="DESVIO ORÇAMENTO", value=f"{desvio_orcamento:,.0f} €".replace(",", " "), delta=f"{desvio_orcamento:,.0f} €".replace(",", " "))
