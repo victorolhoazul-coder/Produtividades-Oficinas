@@ -249,11 +249,7 @@ def oficina_permitida_check(oficina_nome):
     oficina_up = limpar_str(oficina_nome)
     for permitida in st.session_state.oficinas_autorizadas:
         p_clean = limpar_str(permitida)
-        cidades = ["BEJA", "EVORA", "ÉVORA", "FARO", "SETUBAL", "SETÚBAL", "PORTIMAO", "PORTIMÃO", "SINES", "ALMADA"]
-        cidade_p = next((c for c in cidades if c in p_clean), p_clean)
-        cidade_o = next((c for c in cidades if c in oficina_up), oficina_up)
-        
-        if cidade_p == cidade_o or p_clean in oficina_up or oficina_up in p_clean:
+        if p_clean == oficina_up or p_clean in oficina_up or oficina_up in p_clean:
             return True
     return False
 
@@ -640,13 +636,12 @@ else:
                                 pass
                                 
                     if mes_encontrado:
-                        if sel_clean == ofic_row:
-                            orc_encontrado = converter_valor_pt(row[col_val])
-                            break
-                        elif sel_clean in ofic_row or ofic_row in sel_clean:
+                        # Correspondência exata ou por inclusão direta (ex: "Of. Peugeot Beja" ou "Colisão Beja")
+                        if sel_clean == ofic_row or sel_clean in ofic_row or ofic_row in sel_clean:
                             val_v = converter_valor_pt(row[col_val])
-                            if val_v > 0 and val_v < 200000:
+                            if val_v > 0:
                                 orc_encontrado = val_v
+                                break
                                 
                 orcamento_mensal = orc_encontrado
                                 
