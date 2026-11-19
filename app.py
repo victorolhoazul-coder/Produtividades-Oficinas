@@ -577,6 +577,8 @@ else:
             is_total = s.index.isin(df_exibicao_final[df_exibicao_final["Técnico"] == "TOTAL"].index)
             return ['font-weight: bold; background-color: #f0f2f6;' if v else '' for v in is_total]
 
+        altura_tabela = min(900, max(160, (len(df_exibicao_final) * 36) + 42))
+
         st.subheader(f"Mapa de Produtividade - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
         st.dataframe(
             df_exibicao_final.style.apply(destacar_total, axis=1).format({
@@ -585,7 +587,7 @@ else:
             }, na_rep="-"),
             use_container_width=True,
             hide_index=True,
-            height=800
+            height=altura_tabela
         )
 
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
