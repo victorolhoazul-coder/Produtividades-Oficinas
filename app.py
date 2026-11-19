@@ -41,6 +41,14 @@ st.markdown("""
         color: #ffffff;
         border: 1px solid #374151;
     }
+    .totais-box {
+        background-color: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin-bottom: 10px;
+        font-size: 14px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -190,9 +198,6 @@ st.sidebar.progress(
     progresso_decimal,
     text=f"Progresso: {dias_decorridos} de {dias_uteis_padrao_mes} dias ({percentagem_progresso:.1f}%)"
 )
-
-st.sidebar.markdown("---")
-container_filtros = st.sidebar.container()
 
 if tem_permissao_upload:
     st.sidebar.markdown("---")
@@ -406,9 +411,6 @@ def carregar_dados_csv_faturacao():
 if not st.session_state.autenticado:
     st.warning("🔒 Por favor, faça login na barra lateral para aceder aos relatórios.")
 elif not path_mecanicos or not path_hf:
-    with container_filtros:
-        st.header("Filtros")
-        st.caption("Aguardando ficheiros de dados.")
     st.warning(f"⚠️ Não foram encontrados os ficheiros padrão no disco para o período de {meses_pt[mes_selecionado].capitalize()} {ano_corrente} ({sigla_mes}). Certifique-se de que os ficheiros estão na pasta do projeto.")
 else:
     if modulo_selecionado == "📊 Produtividade de Oficinas":
@@ -544,14 +546,17 @@ else:
 
         df_completo = df_completo[df_completo["Oficina"].apply(checar_perm_prod)]
 
-        with container_filtros:
-            st.header("Filtros")
+        st.subheader(f"Mapa de Produtividade - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
+
+        col_f_local, col_f_oficina = st.columns(2)
+        with col_f_local:
             locais_unicos = sorted(df_completo["Local"].dropna().astype(str).unique().tolist())
             locais_disponiveis = (["Todas"] + locais_unicos) if len(locais_unicos) > 1 else locais_unicos
             sel_local = st.selectbox("Selecionar Cidade (Local)", locais_disponiveis if locais_disponiveis else ["Sem acesso"])
 
-            df_filtrado_local = df_completo[df_completo["Local"] == sel_local] if sel_local != "Todas" else df_completo
+        df_filtrado_local = df_completo[df_completo["Local"] == sel_local] if sel_local != "Todas" else df_completo
 
+        with col_f_oficina:
             oficinas_unicas = sorted(df_filtrado_local["Oficina"].dropna().astype(str).unique().tolist())
             oficinas_disponiveis = (["Todas"] + oficinas_unicas) if len(oficinas_unicas) > 1 else oficinas_unicas
             sel_oficina = st.selectbox("Selecionar Oficina", oficinas_disponiveis if oficinas_disponiveis else ["Sem acesso"])
@@ -564,6 +569,18 @@ else:
         tot_h_disp = df_final_filtro["Horas disponiveis"].sum()
         tot_h_fact = df_final_filtro["Horas facturadas"].sum()
         tot_prod = (tot_h_fact / tot_h_disp * 100) if tot_h_disp > 0 else 0.0
+
+        st.markdown(f"""
+            <div class="totais-box">
+                <strong>TOTAIS:</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>H. Potencial:</strong> {tot_h_potencial:.1f} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>H. Reais/Dia:</strong> {tot_h_reais:.1f} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>Ausências:</strong> {tot_ausencias:.1f} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>H. Disponíveis:</strong> {tot_h_disp:.1f} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>H. Faturadas:</strong> {tot_h_fact:.2f} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>Produtividade:</strong> {tot_prod:.1f}%
+            </div>
+        """, unsafe_allow_html=True)
 
         linha_total = {
             "Técnico": "TOTAL", "Local": "-", "Oficina": "-", "Função": "-",
@@ -579,7 +596,6 @@ else:
 
         altura_tabela = min(900, max(160, (len(df_exibicao_final) * 36) + 42))
 
-        st.subheader(f"Mapa de Produtividade - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
         st.dataframe(
             df_exibicao_final.style.apply(destacar_total, axis=1).format({
                 "Horas potencial dia": "{:.1f}", "Horas reais dia": "{:.1f}", "Ausencias": "{:.1f}",
