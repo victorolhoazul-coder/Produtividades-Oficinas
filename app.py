@@ -250,6 +250,60 @@ def calcular_dias_uteis_mes(ano, mes, cidade="Nacional (Sem Municipal)"):
         atual += timedelta(days=1)
     return dias_uteis
 
+def parse_data_opcional(val):
+    if pd.isna(val):
+        return None
+    s = str(val).strip()
+    if not s or s.lower() in ["nan", "nat", "none", "-", ""]:
+        return None
+    if isinstance(val, (pd.Timestamp, datetime)):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%y", "%d-%m-%y"):
+        try:
+            dt = datetime.strptime(s[:10], fmt)
+            if dt.year < 2000:
+                dt = dt.replace(year=dt.year + 2000)
+            return dt.date()
+        except Exception:
+            continue
+    dt_pd = pd.to_datetime(s, dayfirst=True, errors="coerce")
+    if pd.notna(dt_pd):
+        return dt_pd.date()
+    return None
+
+def calcular_dias_ativos_mecanico(data_entrada_val, data_saida_val, ano, mes, max_dias_decorridos, data_ref_atual, cidade="Nacional (Sem Municipal)"):
+    inicio_mes = date(ano, mes, 1)
+    fim_mes = date(ano + 1, 1, 1) - timedelta(days=1) if mes == 12 else date(ano, mes + 1, 1) - timedelta(days=1)
+
+    hoje = datetime.now().date()
+    if ano == hoje.year and mes == hoje.month:
+        limite_periodo = min(fim_mes, data_ref_atual)
+    elif date(ano, mes, 1) > hoje:
+        limite_periodo = fim_mes
+    else:
+        limite_periodo = fim_mes
+
+    dt_entrada = parse_data_opcional(data_entrada_val)
+    dt_saida = parse_data_opcional(data_saida_val)
+
+    inicio_efetivo = max(inicio_mes, dt_entrada) if dt_entrada is not None else inicio_mes
+    fim_efetivo = min(limite_periodo, dt_saida) if dt_saida is not None else limite_periodo
+
+    if inicio_efetivo > fim_efetivo:
+        return 0
+
+    feriados = obter_feriados_mes(ano, mes, cidade)
+    dias_uteis = 0
+    atual = inicio_efetivo
+    while atual <= fim_efetivo:
+        if atual.weekday() < 5 and atual not in feriados:
+            dias_uteis += 1
+        atual += timedelta(days=1)
+
+    return min(max_dias_decorridos, dias_uteis)
+
 dias_uteis_padrao_mes = calcular_dias_uteis_mes(ano_corrente, mes_selecionado, cidade_feriado)
 data_ontem = datetime.now().date() - timedelta(days=1)
 dias_decorridos_calc = calcular_dias_uteis_ate_data(ano_corrente, mes_selecionado, data_ontem, cidade_feriado)
@@ -523,6 +577,22 @@ else:
         df_mecanicos["Oficina"] = df_mecanicos["Oficina"].astype(str).str.strip()
         df_mecanicos["Local"] = df_mecanicos["Local"].astype(str).str.strip()
 
+        col_entrada = next((c for c in df_mecanicos.columns if limpar_str(c) in ["DATA ENTRADA", "DATA DE ENTRADA", "ENTRADA"]), None)
+        col_saida = next((c for c in df_mecanicos.columns if limpar_str(c) in ["DATA SAIDA", "DATA DE SAIDA", "SAIDA"]), None)
+
+        df_mecanicos["Dias_Ativos_Calc"] = df_mecanicos.apply(
+            lambda r: calcular_dias_ativos_mecanico(
+                r[col_entrada] if col_entrada else None,
+                r[col_saida] if col_saida else None,
+                ano_corrente,
+                mes_selecionado,
+                dias_decorridos,
+                data_ontem,
+                cidade_feriado
+            ),
+            axis=1
+        )
+
         mapa_prod_master = {}
         if not df_agrup_master.empty:
             for _, r in df_agrup_master.iterrows():
@@ -579,7 +649,7 @@ else:
             df_merged["Ausencias"] = 0.0
 
         df_merged["Horas facturadas"] = df_merged["Horas facturadas"].fillna(0.0)
-        df_merged["Horas potencial dia"] = dias_decorridos * df_merged["Horas reais dia"]
+        df_merged["Horas potencial dia"] = df_merged["Dias_Ativos_Calc"] * df_merged["Horas reais dia"]
         df_merged["Horas disponiveis"] = df_merged["Horas potencial dia"] - df_merged["Ausencias"]
 
         colunas_finais = ["Técnico", "Local", "Oficina", "Função", "Horas potencial dia", "Horas reais dia", "Ausencias", "Horas disponiveis", "Horas facturadas", "Produtividade %"]
