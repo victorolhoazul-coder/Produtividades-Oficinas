@@ -652,6 +652,12 @@ else:
         df_merged["Horas potencial dia"] = df_merged["Dias_Ativos_Calc"] * df_merged["Horas reais dia"]
         df_merged["Horas disponiveis"] = df_merged["Horas potencial dia"] - df_merged["Ausencias"]
 
+        df_merged = df_merged[
+            (df_merged["Dias_Ativos_Calc"] > 0) |
+            (df_merged["Horas facturadas"] != 0) |
+            (df_merged["Ausencias"] != 0)
+        ].copy()
+
         colunas_finais = ["Técnico", "Local", "Oficina", "Função", "Horas potencial dia", "Horas reais dia", "Ausencias", "Horas disponiveis", "Horas facturadas", "Produtividade %"]
         
         df_merged["Produtividade %"] = 0.0
