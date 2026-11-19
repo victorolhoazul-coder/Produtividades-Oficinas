@@ -649,13 +649,13 @@ else:
             df_merged["Ausencias"] = 0.0
 
         df_merged["Horas facturadas"] = df_merged["Horas facturadas"].fillna(0.0)
+        df_merged.loc[(df_merged["Dias_Ativos_Calc"] <= 0) & (df_merged["Horas facturadas"] == 0), "Ausencias"] = 0.0
         df_merged["Horas potencial dia"] = df_merged["Dias_Ativos_Calc"] * df_merged["Horas reais dia"]
         df_merged["Horas disponiveis"] = df_merged["Horas potencial dia"] - df_merged["Ausencias"]
 
         df_merged = df_merged[
             (df_merged["Dias_Ativos_Calc"] > 0) |
-            (df_merged["Horas facturadas"] != 0) |
-            (df_merged["Ausencias"] != 0)
+            (df_merged["Horas facturadas"] != 0)
         ].copy()
 
         colunas_finais = ["Técnico", "Local", "Oficina", "Função", "Horas potencial dia", "Horas reais dia", "Ausencias", "Horas disponiveis", "Horas facturadas", "Produtividade %"]
@@ -961,27 +961,3 @@ else:
                         alt.Tooltip('Facturacao_Diaria_Graf:Q', title='Faturação Diária', format=',.2f'),
                         alt.Tooltip('Facturacao_Acumulada_Graf:Q', title='Faturação Acumulada', format=',.2f')
                     ]
-                )
-                linha_orc = base.mark_line(color='#f97316', strokeWidth=3).encode(
-                    y=alt.Y('Orcamento_Acumulado:Q', title='Orçamento Acumulado'),
-                    tooltip=[
-                        alt.Tooltip('Data_Str:N', title='Data'),
-                        alt.Tooltip('Orcamento_Acumulado:Q', title='Orçamento Acumulado', format=',.2f')
-                    ]
-                )
-                chart = (barras + linha_orc).properties(height=420).interactive()
-                st.altair_chart(chart, use_container_width=True)
-                
-            with col_kpi:
-                orc_mensal_txt = f"{orcamento_mensal:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
-                orc_diario_txt = f"{orcamento_diario:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
-                fat_data_txt = f"{facturacao_a_data:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
-                desvio_txt = f"{desvio_orcamento:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
-                cor_desvio = "green" if desvio_orcamento >= 0 else "red"
-
-                st.metric(label="ORÇAMENTO MENSAL", value=orc_mensal_txt)
-                st.metric(label="ORÇAMENTO DIÁRIO", value=orc_diario_txt)
-                st.metric(label="FATURAÇÃO À DATA", value=fat_data_txt)
-                
-                st.markdown(f'<div style="font-size: 14px; font-weight: 600; color: rgb(49, 51, 63); margin-bottom: 0px;">DESVIO ORÇAMENTO</div><div style="font-size: 24px; font-weight: 700; color: {cor_desvio}; margin-top: 0px; margin-bottom: 0px;">{desvio_txt}</div>', unsafe_allow_html=True)
-                st.metric(label="", value="", delta=desvio_txt, label_visibility="collapsed")
