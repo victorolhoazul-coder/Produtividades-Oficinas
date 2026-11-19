@@ -612,22 +612,11 @@ else:
 
         st.markdown(f'<div class="totais-box"><strong>TOTAIS:</strong> &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Potencial:</strong> {tot_h_potencial:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Reais/Dia:</strong> {tot_h_reais:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Ausências:</strong> {tot_ausencias:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Disponíveis:</strong> {tot_h_disp:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Faturadas:</strong> {tot_h_fact:.2f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Produtividade:</strong> {tot_prod:.1f}%</div>', unsafe_allow_html=True)
 
-        linha_total = {
-            "Técnico": "TOTAL", "Local": "-", "Oficina": "-", "Função": "-",
-            "Horas potencial dia": tot_h_potencial, "Horas reais dia": tot_h_reais, "Ausencias": tot_ausencias,
-            "Horas disponiveis": tot_h_disp, "Horas facturadas": tot_h_fact, "Produtividade %": tot_prod
-        }
-
-        df_exibicao_final = pd.concat([df_final_filtro, pd.DataFrame([linha_total])], ignore_index=True)
-
-        def destacar_total(s):
-            is_total = s.index.isin(df_exibicao_final[df_exibicao_final["Técnico"] == "TOTAL"].index)
-            return ['font-weight: bold; background-color: #f0f2f6;' if v else '' for v in is_total]
-
-        altura_tabela = min(900, max(160, (len(df_exibicao_final) * 36) + 42))
+        df_exibicao_final = df_final_filtro.copy()
+        altura_tabela = min(900, max(140, (len(df_exibicao_final) * 36) + 42))
 
         st.dataframe(
-            df_exibicao_final.style.apply(destacar_total, axis=1).format({
+            df_exibicao_final.style.format({
                 "Horas potencial dia": "{:.1f}", "Horas reais dia": "{:.1f}", "Ausencias": "{:.1f}",
                 "Horas disponiveis": "{:.1f}", "Horas facturadas": "{:.2f}", "Produtividade %": "{:.1f}%"
             }, na_rep="-"),
