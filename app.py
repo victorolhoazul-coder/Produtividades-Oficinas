@@ -30,87 +30,55 @@ if "oficinas_agrupadas_perfil" not in st.session_state:
 if "modulo_ativo" not in st.session_state:
     st.session_state.modulo_ativo = "Produtividade de Oficinas"
 
-st.markdown("""
-    <style>
-    div.stButton > button:first-child {
-        background-color: #9ca3af;
-        color: #ffffff;
-        border: 1px solid #4b5563;
-        font-weight: 600;
-    }
-    div.stButton > button:first-child:hover {
-        background-color: #6b7280;
-        color: #ffffff;
-        border: 1px solid #374151;
-    }
-    .totais-box {
-        background-color: #f8fafc;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
-        padding: 10px 14px;
-        margin-bottom: 10px;
-        font-size: 14px;
-    }
-    .modulo-card {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 16px;
-        border-radius: 8px;
-        border: 1px solid #cbd5e1;
-        background-color: #f8fafc;
-        margin-bottom: 6px;
-    }
-    .modulo-card-ativo {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 16px;
-        border-radius: 8px;
-        border: 2px solid #0f766e;
-        background-color: #f0fdfa;
-        margin-bottom: 6px;
-        box-shadow: 0 2px 6px rgba(15, 118, 110, 0.12);
-    }
-    .modulo-titulo {
-        font-size: 17px;
-        font-weight: 700;
-        color: #0f172a;
-        line-height: 1.2;
-    }
-    .modulo-sub {
-        font-size: 12px;
-        color: #475569;
-        margin-top: 2px;
-    }
-    .modulo-badge-ativo {
-        margin-left: auto;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        padding: 3px 8px;
-        border-radius: 999px;
-        background-color: #0f766e;
-        color: #ffffff;
-    }
-    </style>
-""", unsafe_allow_html=True)
+st.markdown("""<style>
+div.stButton > button:first-child {
+    font-weight: 600;
+}
+.totais-box {
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+.modulo-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+.modulo-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.modulo-titulo {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.2;
+}
+.modulo-sub {
+    font-size: 12px;
+    color: #475569;
+    margin-bottom: 10px;
+}
+.modulo-badge-ativo {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background-color: #0f766e;
+    color: #ffffff;
+}
+</style>""", unsafe_allow_html=True)
 
-ICON_PRODUTIVIDADE = """
-<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <line x1="18" y1="20" x2="18" y2="10"></line>
-  <line x1="12" y1="20" x2="12" y2="4"></line>
-  <line x1="6" y1="20" x2="6" y2="14"></line>
-</svg>
-"""
+ICON_PRODUTIVIDADE = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>'
 
-ICON_FATURACAO = """
-<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-  <line x1="2" y1="10" x2="22" y2="10"></line>
-  <path d="M12 15h4"></path>
-</svg>
-"""
+ICON_FATURACAO = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line><path d="M12 15h4"></path></svg>'
 
 col_titulo, col_logo = st.columns([5, 1])
 with col_titulo:
@@ -125,39 +93,21 @@ col_mod1, col_mod2 = st.columns(2)
 
 with col_mod1:
     ativo_prod = st.session_state.modulo_ativo == "Produtividade de Oficinas"
-    classe_card1 = "modulo-card-ativo" if ativo_prod else "modulo-card"
-    badge1 = '<span class="modulo-badge-ativo">Ativo</span>' if ativo_prod else ""
-    st.markdown(f"""
-        <div class="{classe_card1}">
-            {ICON_PRODUTIVIDADE}
-            <div>
-                <div class="modulo-titulo">Produtividade de Oficinas</div>
-                <div class="modulo-sub">Tempos faturados, ausências, horas disponíveis e % produtividade</div>
-            </div>
-            {badge1}
-        </div>
-    """, unsafe_allow_html=True)
-    if st.button("Abrir Produtividade de Oficinas", key="btn_mod_prod", use_container_width=True):
-        st.session_state.modulo_ativo = "Produtividade de Oficinas"
-        st.rerun()
+    with st.container(border=True):
+        badge1 = '<span class="modulo-badge-ativo">Ativo</span>' if ativo_prod else ""
+        st.markdown(f'<div class="modulo-header-row"><div class="modulo-left">{ICON_PRODUTIVIDADE}<span class="modulo-titulo">Produtividade de Oficinas</span></div>{badge1}</div><div class="modulo-sub">Tempos faturados, ausências, horas disponíveis e % produtividade</div>', unsafe_allow_html=True)
+        if st.button("Produtividade de Oficinas", key="btn_mod_prod", type="primary" if ativo_prod else "secondary", use_container_width=True):
+            st.session_state.modulo_ativo = "Produtividade de Oficinas"
+            st.rerun()
 
 with col_mod2:
     ativo_fat = st.session_state.modulo_ativo == "Faturação e Orçamento Diário"
-    classe_card2 = "modulo-card-ativo" if ativo_fat else "modulo-card"
-    badge2 = '<span class="modulo-badge-ativo">Ativo</span>' if ativo_fat else ""
-    st.markdown(f"""
-        <div class="{classe_card2}">
-            {ICON_FATURACAO}
-            <div>
-                <div class="modulo-titulo">Faturação e Orçamento Diário</div>
-                <div class="modulo-sub">Faturação acumulada, orçamento diário/mensal e desvios</div>
-            </div>
-            {badge2}
-        </div>
-    """, unsafe_allow_html=True)
-    if st.button("Abrir Faturação e Orçamento Diário", key="btn_mod_fat", use_container_width=True):
-        st.session_state.modulo_ativo = "Faturação e Orçamento Diário"
-        st.rerun()
+    with st.container(border=True):
+        badge2 = '<span class="modulo-badge-ativo">Ativo</span>' if ativo_fat else ""
+        st.markdown(f'<div class="modulo-header-row"><div class="modulo-left">{ICON_FATURACAO}<span class="modulo-titulo">Faturação e Orçamento Diário</span></div>{badge2}</div><div class="modulo-sub">Faturação acumulada, orçamento diário/mensal e desvios</div>', unsafe_allow_html=True)
+        if st.button("Faturação e Orçamento Diário", key="btn_mod_fat", type="primary" if ativo_fat else "secondary", use_container_width=True):
+            st.session_state.modulo_ativo = "Faturação e Orçamento Diário"
+            st.rerun()
 
 st.markdown("---")
 modulo_selecionado = st.session_state.modulo_ativo
@@ -660,17 +610,7 @@ else:
         tot_h_fact = df_final_filtro["Horas facturadas"].sum()
         tot_prod = (tot_h_fact / tot_h_disp * 100) if tot_h_disp > 0 else 0.0
 
-        st.markdown(f"""
-            <div class="totais-box">
-                <strong>TOTAIS:</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
-                <strong>H. Potencial:</strong> {tot_h_potencial:.1f} &nbsp;&nbsp;|&nbsp;&nbsp;
-                <strong>H. Reais/Dia:</strong> {tot_h_reais:.1f} &nbsp;&nbsp;|&nbsp;&nbsp;
-                <strong>Ausências:</strong> {tot_ausencias:.1f} &nbsp;&nbsp;|&nbsp;&nbsp;
-                <strong>H. Disponíveis:</strong> {tot_h_disp:.1f} &nbsp;&nbsp;|&nbsp;&nbsp;
-                <strong>H. Faturadas:</strong> {tot_h_fact:.2f} &nbsp;&nbsp;|&nbsp;&nbsp;
-                <strong>Produtividade:</strong> {tot_prod:.1f}%
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f'<div class="totais-box"><strong>TOTAIS:</strong> &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Potencial:</strong> {tot_h_potencial:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Reais/Dia:</strong> {tot_h_reais:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Ausências:</strong> {tot_ausencias:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Disponíveis:</strong> {tot_h_disp:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Faturadas:</strong> {tot_h_fact:.2f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Produtividade:</strong> {tot_prod:.1f}%</div>', unsafe_allow_html=True)
 
         linha_total = {
             "Técnico": "TOTAL", "Local": "-", "Oficina": "-", "Função": "-",
@@ -917,8 +857,5 @@ else:
                 st.metric(label="ORÇAMENTO DIÁRIO", value=orc_diario_txt)
                 st.metric(label="FATURAÇÃO À DATA", value=fat_data_txt)
                 
-                st.markdown(f"""
-                    <div style="font-size: 14px; font-weight: 600; color: rgb(49, 51, 63); margin-bottom: 0px;">DESVIO ORÇAMENTO</div>
-                    <div style="font-size: 24px; font-weight: 700; color: {cor_desvio}; margin-top: 0px; margin-bottom: 0px;">{desvio_txt}</div>
-                """, unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size: 14px; font-weight: 600; color: rgb(49, 51, 63); margin-bottom: 0px;">DESVIO ORÇAMENTO</div><div style="font-size: 24px; font-weight: 700; color: {cor_desvio}; margin-top: 0px; margin-bottom: 0px;">{desvio_txt}</div>', unsafe_allow_html=True)
                 st.metric(label="", value="", delta=desvio_txt, label_visibility="collapsed")
