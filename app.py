@@ -34,14 +34,6 @@ st.markdown("""<style>
 div.stButton > button:first-child {
     font-weight: 600;
 }
-.totais-box {
-    background-color: #f8fafc;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    padding: 10px 14px;
-    margin-bottom: 10px;
-    font-size: 14px;
-}
 .modulo-header-row {
     display: flex;
     align-items: center;
@@ -73,6 +65,49 @@ div.stButton > button:first-child {
     border-radius: 999px;
     background-color: #0f766e;
     color: #ffffff;
+}
+.grelha-prod-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-top: 6px;
+}
+table.grelha-prod {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    color: #0f172a;
+    background-color: #ffffff;
+}
+table.grelha-prod th {
+    background-color: #f8fafc;
+    color: #334155;
+    font-weight: 600;
+    padding: 9px 12px;
+    border-bottom: 1px solid #cbd5e1;
+    white-space: nowrap;
+}
+table.grelha-prod td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    white-space: nowrap;
+}
+table.grelha-prod tr:hover td {
+    background-color: #f8fafc;
+}
+table.grelha-prod tr.linha-total td {
+    font-weight: 700 !important;
+    background-color: #eef2f6 !important;
+    border-top: 2px solid #94a3b8;
+    border-bottom: 2px solid #94a3b8;
+    color: #0f172a;
+}
+.num-col {
+    text-align: right;
+}
+.txt-col {
+    text-align: left;
 }
 </style>""", unsafe_allow_html=True)
 
@@ -610,20 +645,47 @@ else:
         tot_h_fact = df_final_filtro["Horas facturadas"].sum()
         tot_prod = (tot_h_fact / tot_h_disp * 100) if tot_h_disp > 0 else 0.0
 
-        st.markdown(f'<div class="totais-box"><strong>TOTAIS:</strong> &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Potencial:</strong> {tot_h_potencial:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Reais/Dia:</strong> {tot_h_reais:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Ausências:</strong> {tot_ausencias:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Disponíveis:</strong> {tot_h_disp:.1f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>H. Faturadas:</strong> {tot_h_fact:.2f} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Produtividade:</strong> {tot_prod:.1f}%</div>', unsafe_allow_html=True)
+        cols_visiveis = [c for c in colunas_finais if c in df_final_filtro.columns]
+        ths_html = "".join([
+            f'<th class="{"num-col" if c in ["Horas potencial dia", "Horas reais dia", "Ausencias", "Horas disponiveis", "Horas facturadas", "Produtividade %"] else "txt-col"}">{c}</th>'
+            for c in cols_visiveis
+        ])
 
-        df_exibicao_final = df_final_filtro.copy()
-        altura_tabela = min(900, max(140, (len(df_exibicao_final) * 36) + 42))
+        trs_html = []
+        for _, r in df_final_filtro.iterrows():
+            tds = []
+            for c in cols_visiveis:
+                val = r[c]
+                if c in ["Horas potencial dia", "Horas reais dia", "Ausencias", "Horas disponiveis"]:
+                    tds.append(f'<td class="num-col">{float(val):.1f}</td>')
+                elif c == "Horas facturadas":
+                    tds.append(f'<td class="num-col">{float(val):.2f}</td>')
+                elif c == "Produtividade %":
+                    tds.append(f'<td class="num-col">{float(val):.1f}%</td>')
+                else:
+                    tds.append(f'<td class="txt-col">{val}</td>')
+            trs_html.append(f'<tr>{"".join(tds)}</tr>')
 
-        st.dataframe(
-            df_exibicao_final.style.format({
-                "Horas potencial dia": "{:.1f}", "Horas reais dia": "{:.1f}", "Ausencias": "{:.1f}",
-                "Horas disponiveis": "{:.1f}", "Horas facturadas": "{:.2f}", "Produtividade %": "{:.1f}%"
-            }, na_rep="-"),
-            use_container_width=True,
-            hide_index=True,
-            height=altura_tabela
-        )
+        totais_map = {
+            "Técnico": "<strong>TOTAL</strong>",
+            "Local": "-",
+            "Oficina": "-",
+            "Função": "-",
+            "Horas potencial dia": f"<strong>{tot_h_potencial:.1f}</strong>",
+            "Horas reais dia": f"<strong>{tot_h_reais:.1f}</strong>",
+            "Ausencias": f"<strong>{tot_ausencias:.1f}</strong>",
+            "Horas disponiveis": f"<strong>{tot_h_disp:.1f}</strong>",
+            "Horas facturadas": f"<strong>{tot_h_fact:.2f}</strong>",
+            "Produtividade %": f"<strong>{tot_prod:.1f}%</strong>"
+        }
+        tds_total = "".join([
+            f'<td class="{"num-col" if c in ["Horas potencial dia", "Horas reais dia", "Ausencias", "Horas disponiveis", "Horas facturadas", "Produtividade %"] else "txt-col"}">{totais_map.get(c, "-")}</td>'
+            for c in cols_visiveis
+        ])
+        trs_html.append(f'<tr class="linha-total">{tds_total}</tr>')
+
+        tabela_html = f'<div class="grelha-prod-wrap"><table class="grelha-prod"><thead><tr>{ths_html}</tr></thead><tbody>{"".join(trs_html)}</tbody></table></div>'
+        st.markdown(tabela_html, unsafe_allow_html=True)
 
     elif modulo_selecionado == "Faturação e Orçamento Diário":
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
