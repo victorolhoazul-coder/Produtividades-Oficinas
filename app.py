@@ -378,7 +378,6 @@ def carregar_dados_csv_faturacao():
                     with open(file_f, "r", encoding="iso-8859-1", errors="ignore") as f:
                         conteudo = f.read()
                 
-                # Leitura robusta linha a linha usando a biblioteca csv
                 linhas_validas = []
                 for sep in [";", "\t", ","]:
                     f_io = io.StringIO(conteudo)
@@ -584,7 +583,9 @@ else:
                 "Horas potencial dia": "{:.1f}", "Horas reais dia": "{:.1f}", "Ausencias": "{:.1f}",
                 "Horas disponiveis": "{:.1f}", "Horas facturadas": "{:.2f}", "Produtividade %": "{:.1f}%"
             }, na_rep="-"),
-            use_container_width=True
+            use_container_width=True,
+            hide_index=True,
+            height=500
         )
 
     elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
