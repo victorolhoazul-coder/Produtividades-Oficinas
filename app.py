@@ -852,7 +852,8 @@ else:
             col_sel_rapv, col_sel_ofic = st.columns(2)
             
             if st.session_state.acesso_total:
-                rapvs_autorizados = sorted(list(set(mapa_rapv_master.values())))
+                rapvs_base = sorted(list(set(mapa_rapv_master.values())))
+                rapvs_autorizados = ["Todas"] + rapvs_base
             else:
                 rapv_usuario_atual = str(st.session_state.rapv_permitido).strip()
                 rapvs_autorizados = [rapv_usuario_atual] if rapv_usuario_atual else ["Geral"]
@@ -860,22 +861,44 @@ else:
             with col_sel_rapv:
                 rapv_selecionado = st.selectbox("Selecionar RAPV:", options=rapvs_autorizados)
 
-            oficinas_filtradas_rapv = [
-                o for o in oficinas_autorizadas_lista 
-                if mapa_rapv_master.get(o, "").strip().upper() == rapv_selecionado.strip().upper()
-            ]
-            if not oficinas_filtradas_rapv: oficinas_filtradas_rapv = [oficinas_autorizadas_lista[0]]
+            if st.session_state.acesso_total and rapv_selecionado == "Todas":
+                oficinas_filtradas_rapv = ["Todas"] + oficinas_autorizadas_lista
+            else:
+                oficinas_filtradas_rapv = [
+                    o for o in oficinas_autorizadas_lista 
+                    if mapa_rapv_master.get(o, "").strip().upper() == rapv_selecionado.strip().upper()
+                ]
+                if not oficinas_filtradas_rapv:
+                    oficinas_filtradas_rapv = [oficinas_autorizadas_lista[0]]
+                if st.session_state.acesso_total and len(oficinas_filtradas_rapv) > 1:
+                    oficinas_filtradas_rapv = ["Todas"] + oficinas_filtradas_rapv
 
             with col_sel_ofic:
                 oficina_selecionada_fat = st.selectbox("Selecionar Oficina (Faturação):", options=oficinas_filtradas_rapv)
-                
-            sel_clean = limpar_str(oficina_selecionada_fat)
-            suboficinas_grupo = lista_suboficinas_por_grupo_fact.get(oficina_selecionada_fat, {sel_clean})
-            
-            df_oficina_fat = df_fact_total[
-                (df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean) |
-                (df_fact_total["Oficina_CSV"].apply(limpar_str).isin(suboficinas_grupo))
-            ]
+
+            if oficina_selecionada_fat == "Todas":
+                oficinas_alvo_lista = [o for o in oficinas_filtradas_rapv if o != "Todas"]
+                if not oficinas_alvo_lista:
+                    oficinas_alvo_lista = oficinas_autorizadas_lista
+
+                oficinas_alvo_clean = {limpar_str(o) for o in oficinas_alvo_lista}
+                suboficinas_alvo_clean = set()
+                for o in oficinas_alvo_lista:
+                    suboficinas_alvo_clean.update(lista_suboficinas_por_grupo_fact.get(o, {limpar_str(o)}))
+
+                df_oficina_fat = df_fact_total[
+                    (df_fact_total["Oficina_Agrupada"].apply(limpar_str).isin(oficinas_alvo_clean)) |
+                    (df_fact_total["Oficina_CSV"].apply(limpar_str).isin(suboficinas_alvo_clean))
+                ]
+            else:
+                sel_clean = limpar_str(oficina_selecionada_fat)
+                suboficinas_grupo = lista_suboficinas_por_grupo_fact.get(oficina_selecionada_fat, {sel_clean})
+                oficinas_alvo_clean = {sel_clean} | suboficinas_grupo
+
+                df_oficina_fat = df_fact_total[
+                    (df_fact_total["Oficina_Agrupada"].apply(limpar_str) == sel_clean) |
+                    (df_fact_total["Oficina_CSV"].apply(limpar_str).isin(suboficinas_grupo))
+                ]
             
             df_oficina_fat = df_oficina_fat[(df_oficina_fat["Data_Parsed"].dt.month == mes_selecionado) & (df_oficina_fat["Data_Parsed"].dt.year == ano_corrente)]
             
@@ -929,7 +952,7 @@ else:
                             except: pass
                             
                     if mes_encontrado:
-                        if sel_clean == ofic_row or sel_clean in ofic_row or ofic_row in sel_clean:
+                        if any(alvo == ofic_row or alvo in ofic_row or ofic_row in alvo for alvo in oficinas_alvo_clean):
                             orcamento_mensal += converter_valor_pt(row[col_val])
                                 
             orcamento_diario = orcamento_mensal / dias_uteis_padrao_mes if dias_uteis_padrao_mes > 0 else 0.0
