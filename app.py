@@ -440,7 +440,6 @@ def carregar_dados_csv_faturacao():
                 encontrados.append(fe)
 
         encontrados = list(set(encontrados))
-        st.sidebar.info(f"📁 CSVs detetados: {encontrados}")
         
         for arq in encontrados:
             csv_fontes.append(arq)
