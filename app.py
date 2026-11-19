@@ -27,6 +27,8 @@ if "agrupar_perfil" not in st.session_state:
     st.session_state.agrupar_perfil = False
 if "oficinas_agrupadas_perfil" not in st.session_state:
     st.session_state.oficinas_agrupadas_perfil = []
+if "modulo_ativo" not in st.session_state:
+    st.session_state.modulo_ativo = "Produtividade de Oficinas"
 
 st.markdown("""
     <style>
@@ -49,16 +51,116 @@ st.markdown("""
         margin-bottom: 10px;
         font-size: 14px;
     }
+    .modulo-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        background-color: #f8fafc;
+        margin-bottom: 6px;
+    }
+    .modulo-card-ativo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        border: 2px solid #0f766e;
+        background-color: #f0fdfa;
+        margin-bottom: 6px;
+        box-shadow: 0 2px 6px rgba(15, 118, 110, 0.12);
+    }
+    .modulo-titulo {
+        font-size: 17px;
+        font-weight: 700;
+        color: #0f172a;
+        line-height: 1.2;
+    }
+    .modulo-sub {
+        font-size: 12px;
+        color: #475569;
+        margin-top: 2px;
+    }
+    .modulo-badge-ativo {
+        margin-left: auto;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background-color: #0f766e;
+        color: #ffffff;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-col_titulo, col_logo = st.columns([4, 1])
+ICON_PRODUTIVIDADE = """
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0f766e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <line x1="18" y1="20" x2="18" y2="10"></line>
+  <line x1="12" y1="20" x2="12" y2="4"></line>
+  <line x1="6" y1="20" x2="6" y2="14"></line>
+</svg>
+"""
+
+ICON_FATURACAO = """
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+  <line x1="2" y1="10" x2="22" y2="10"></line>
+  <path d="M12 15h4"></path>
+</svg>
+"""
+
+col_titulo, col_logo = st.columns([5, 1])
 with col_titulo:
     st.title("Relatório de Oficinas - Grupo Motorpor")
 with col_logo:
     logo_path = "logo_motorpor.jpg"
     if os.path.exists(logo_path):
         st.image(logo_path, width=150)
+
+st.markdown("### Módulo Ativo")
+col_mod1, col_mod2 = st.columns(2)
+
+with col_mod1:
+    ativo_prod = st.session_state.modulo_ativo == "Produtividade de Oficinas"
+    classe_card1 = "modulo-card-ativo" if ativo_prod else "modulo-card"
+    badge1 = '<span class="modulo-badge-ativo">Ativo</span>' if ativo_prod else ""
+    st.markdown(f"""
+        <div class="{classe_card1}">
+            {ICON_PRODUTIVIDADE}
+            <div>
+                <div class="modulo-titulo">Produtividade de Oficinas</div>
+                <div class="modulo-sub">Tempos faturados, ausências, horas disponíveis e % produtividade</div>
+            </div>
+            {badge1}
+        </div>
+    """, unsafe_allow_html=True)
+    if st.button("Abrir Produtividade de Oficinas", key="btn_mod_prod", use_container_width=True):
+        st.session_state.modulo_ativo = "Produtividade de Oficinas"
+        st.rerun()
+
+with col_mod2:
+    ativo_fat = st.session_state.modulo_ativo == "Faturação e Orçamento Diário"
+    classe_card2 = "modulo-card-ativo" if ativo_fat else "modulo-card"
+    badge2 = '<span class="modulo-badge-ativo">Ativo</span>' if ativo_fat else ""
+    st.markdown(f"""
+        <div class="{classe_card2}">
+            {ICON_FATURACAO}
+            <div>
+                <div class="modulo-titulo">Faturação e Orçamento Diário</div>
+                <div class="modulo-sub">Faturação acumulada, orçamento diário/mensal e desvios</div>
+            </div>
+            {badge2}
+        </div>
+    """, unsafe_allow_html=True)
+    if st.button("Abrir Faturação e Orçamento Diário", key="btn_mod_fat", use_container_width=True):
+        st.session_state.modulo_ativo = "Faturação e Orçamento Diário"
+        st.rerun()
+
+st.markdown("---")
+modulo_selecionado = st.session_state.modulo_ativo
 
 meses_pt = {
     1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril", 
@@ -92,18 +194,6 @@ if os.path.exists(master_file):
 
 tem_permissao_upload = st.session_state.get("autenticado", False) and st.session_state.get("is_admin", False)
 
-st.sidebar.header("Navegação e Módulo")
-opcoes_modulos = [
-    "📊 Produtividade de Oficinas", 
-    "💶 Faturação e Orçamento Diário"
-]
-
-modulo_selecionado = st.sidebar.radio(
-    "Escolha o Módulo:",
-    options=opcoes_modulos
-)
-
-st.sidebar.markdown("---")
 st.sidebar.header("Seleção de Período")
 ano_corrente = st.sidebar.selectbox("Ano:", options=[2025, 2026, 2027], index=1)
 mes_atual_num = datetime.now().month
@@ -413,7 +503,7 @@ if not st.session_state.autenticado:
 elif not path_mecanicos or not path_hf:
     st.warning(f"⚠️ Não foram encontrados os ficheiros padrão no disco para o período de {meses_pt[mes_selecionado].capitalize()} {ano_corrente} ({sigla_mes}). Certifique-se de que os ficheiros estão na pasta do projeto.")
 else:
-    if modulo_selecionado == "📊 Produtividade de Oficinas":
+    if modulo_selecionado == "Produtividade de Oficinas":
         xl = pd.ExcelFile(path_mecanicos)
         df_mecanicos = xl.parse("Mecânicos" if "Mecânicos" in xl.sheet_names else xl.sheet_names[0])
         df_hf = pd.read_excel(path_hf)
@@ -606,7 +696,7 @@ else:
             height=altura_tabela
         )
 
-    elif modulo_selecionado == "💶 Faturação e Orçamento Diário":
+    elif modulo_selecionado == "Faturação e Orçamento Diário":
         st.subheader(f"Faturação e Orçamento Diário - {meses_pt[mes_selecionado].capitalize()} {ano_corrente}")
         
         df_orc = df_orc_master.copy()
